@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UniPCMultistepScheduler
 
-from fit import FiT_models
+from fit import FiT_models, apply_rotary_emb
 
 
 class FiTFusion(pl.LightningModule):
