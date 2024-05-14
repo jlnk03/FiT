@@ -155,13 +155,13 @@ class FiTFusion(pl.LightningModule):
 
             patches = self.FiT.patchify(latent_model_input)
 
+            rope = _create_pos_embed(height//8, width//8, 2, 256**2, 256)
+
+            mask = _create_mask(t, 256**2, batch_size)
+
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            positional_embeddings = None
-            mask = None
-
-            noise_pred = self.FiT(
-                latent_model_input, time_step, text_embeddings, positional_embeddings, mask)
+            noise_pred = self.FiT.construct(patches, time_step, rope, mask)
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
