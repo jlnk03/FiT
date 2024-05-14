@@ -6,7 +6,7 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UniPCMultistepScheduler
 
-from fit import FiT_models
+from fit import FiT_models, apply_rotary_emb
 
 
 class FiTFusion(pl.LightningModule):
@@ -59,7 +59,7 @@ class FiTFusion(pl.LightningModule):
 
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            noise_pred = self.FiT()
+            patches = self.FiT.patchify(latent_model_input)
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
