@@ -57,14 +57,14 @@ class FiTFusion(pl.LightningModule):
             latent_model_input = self.scheduler.scale_model_input(
                 latent_model_input, timestep=t)
 
-            # timestep of diffusion s
+            # timestep of diffusion step
             time_step = torch.tensor([t] * batch_size, device=device)
-
-            positional_embeddings = None
-            mask = None
 
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
+            positional_embeddings = None
+            mask = None
+            
             noise_pred = self.FiT(latent_model_input, time_step, text_embeddings, positional_embeddings, mask)
 
             # perform guidance
