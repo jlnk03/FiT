@@ -59,7 +59,7 @@ class FiTFusion(pl.LightningModule):
 
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            noise_pred = self.FiT(latent_model_input, text_embeddings)
+            noise_pred = self.FiT()
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
