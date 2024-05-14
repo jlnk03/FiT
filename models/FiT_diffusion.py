@@ -57,9 +57,15 @@ class FiTFusion(pl.LightningModule):
             latent_model_input = self.scheduler.scale_model_input(
                 latent_model_input, timestep=t)
 
+            # timestep of diffusion s
+            time_step = torch.tensor([t] * batch_size, device=device)
+
+            positional_embeddings = None
+            mask = None
+
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            noise_pred = self.FiT()
+            noise_pred = self.FiT(latent_model_input, time_step, text_embeddings, positional_embeddings, mask)
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -91,7 +97,7 @@ class FiTFusion(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
-    
+
     def train_dataloader(self):
         pass
 
