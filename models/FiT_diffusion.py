@@ -199,7 +199,7 @@ class FiTFusion(pl.LightningModule):
         timesteps_np = np.random.choice(inference_steps, size=(batch_size,))
         timesteps = torch.from_numpy(indices_np).long().to(device)
 
-        noise = torch.randn(sample_images_encoded.shape)
+        noise = torch.randn(sample_images_encoded.shape) * self.scheduler.init_noise_sigma
 
         noisy_images = noise_scheduler.add_noise(sample_images_encoded, noise, timesteps)
 
