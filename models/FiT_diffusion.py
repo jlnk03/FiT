@@ -183,17 +183,17 @@ class FiTFusion(pl.LightningModule):
 
         return image
 
-    def training_step(self, batch, batch_idx, inference_steps=25):
+    def training_step(self, batch):
         loss = self.forward_with_loss(batch)
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         loss = self.forward_with_loss(batch)
 
         return loss
 
-    def forward_with_loss(self, batch):
+    def forward_with_loss(self, batch, guidance_scale=7.5):
         sample_images, prompts = batch
 
         # NOT USED ATM
@@ -215,6 +215,9 @@ class FiTFusion(pl.LightningModule):
         mask = _create_mask(H * W / 4, 256**2/4, B)
 
         noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(noisy_images), timesteps, rope, mask))
+
+        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
         sample_images_predicted = self.scheduler.step(noise_pred, timesteps, noisy_images).prev_sample
 
