@@ -163,15 +163,12 @@ class FiTFusion(pl.LightningModule):
             # timestep of diffusion step
             time_step = torch.tensor([t] * batch_size, device=self.device)
 
-            patches = self.FiT.patchify(latent_model_input)
-
             rope = _create_pos_embed(height//8, width//8, 2, 256**2/4, 256)
 
             mask = _create_mask(height*width/4, 256**2/4, batch_size)
 
-            # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            noise_pred = self.FiT.construct(patches, time_step, rope, mask)
+            noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(latent_model_input), time_step, rope, mask))
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -181,10 +178,9 @@ class FiTFusion(pl.LightningModule):
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
-        latents = self.unpatchify(latents)
-
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
+
         image = self.vae.decode(latents).sample
         image = (image / 2 + 0.5).clamp(0, 1).squeeze()
         image = (image.permute(1, 2, 0) * 255).to(torch.uint8).cpu().numpy()
@@ -216,7 +212,6 @@ class FiTFusion(pl.LightningModule):
         sample_images_predicted = self.scheduler.step(noise_pred, timesteps, noisy_images).prev_sample
 
         return loss(sample_images_encoded, sample_images_predicted)
-
 
 
     def encode_text(prompt):
