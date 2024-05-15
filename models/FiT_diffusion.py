@@ -107,10 +107,12 @@ def _create_mask(self, valid_t: int, max_length: int, n: int) -> Tensor:
     mask = Tensor(mask)
     return mask
 
+
 class FiTFusion(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.save_hyperparameters()
+
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = CLIPTokenizer.from_pretrained(
@@ -124,20 +126,20 @@ class FiTFusion(pl.LightningModule):
             "CompVis/stable-diffusion-v1-4", subfolder="scheduler")
         self.FiT = FiT_models['FiT-B/2']()
         self.generator = torch.Generator(device=self.device).manual_seed(42)
-        self.batch_size = 64
-        #download dataset
+
         self.dataset = load_dataset("imagenet-1k")
         self.transform = transforms.Compose([transforms.Lambda(lambda img: img.resize((256, img.height)) if img.width > 256 else img),
                                              transforms.Lambda(lambda img: img.resize((img.width, 256)) if img.height > 256 else img),
                                              transforms.RandomHorizontalFlip(),
                                              transforms.ToTensor(),
                                              transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5], inplace=True)])
-
-
         self.loss = torch.nn.MSELoss()
+        self.inference_steps = 25
 
-    def forward(self, prompt='a photograph of an astronaut riding a horse', inference_steps=25, guidance_scale=7.5, height=256, width=256):
-        text_embeddings = encode_text(prompt)
+    def forward(self, prompts, inference_steps=25, guidance_scale=7.5, height=256, width=256):
+        batch_size = len(prompts)
+
+        text_embeddings = self.encode_text(prompts)
 
         latents = torch.randn(
             (batch_size, 4, 256, 256),
@@ -153,23 +155,20 @@ class FiTFusion(pl.LightningModule):
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             latent_model_input = torch.cat([latents] * 2)
 
-            latent_model_input = self.scheduler.scale_model_input(
-                latent_model_input, timestep=t)
+            latent_model_input = self.scheduler.scale_model_input(latent_model_input, timestep=t)
 
-            # timestep of diffusion step
             time_step = torch.tensor([t] * batch_size, device=self.device)
 
-            rope = _create_pos_embed(height//8, width//8, 2, 256**2/4, 256)
+            rope = _create_pos_embed(height // 8, width // 8, 2, 256 ** 2 / 4, 256)
 
-            mask = _create_mask(height*width/4, 256**2/4, batch_size)
+            mask = _create_mask(height * width / 4, 256 ** 2 / 4, batch_size)
 
             # TODO: pass correct parameters such as mask, noise, etc.
             noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(latent_model_input), time_step, rope, mask))
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-            noise_pred = noise_pred_uncond + guidance_scale * \
-                (noise_pred_text - noise_pred_uncond)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
@@ -185,50 +184,61 @@ class FiTFusion(pl.LightningModule):
         return image
 
     def training_step(self, batch, batch_idx, inference_steps=25):
+        loss = self.forward_with_loss(batch)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.forward_with_loss(batch)
+
+        return loss
+
+    def forward_with_loss(self, batch):
         sample_images, prompts = batch
 
         # NOT USED ATM
-        prompts_encoded = encode_text(prompts)
+        prompts_encoded = self.encode_text(prompts)
 
         sample_images_encoded = self.vae.encode(sample_images)
 
-        timesteps_np = np.random.choice(inference_steps, size=(batch_size,))
-        timesteps = torch.from_numpy(indices_np).long().to(device)
+        B, C, H, W = sample_images_encoded.shape
+
+        timesteps_np = np.random.choice(self.inference_steps, size=(B,))
+        timesteps = torch.from_numpy(timesteps_np).long().to(self.device)
 
         noise = torch.randn(sample_images_encoded.shape) * self.scheduler.init_noise_sigma
 
-        noisy_images = noise_scheduler.add_noise(sample_images_encoded, noise, timesteps)
+        noisy_images = self.noise_scheduler.add_noise(sample_images_encoded, noise, timesteps)
 
-        rope = _create_pos_embed(height//8, width//8, 2, 256**2/4, 256)
+        rope = _create_pos_embed(H // 8, W // 8, 2, 256 ** 2 / 4, 256)
 
-        mask = _create_mask(height*width/4, 256**2/4, batch_size)
+        mask = _create_mask(H * W / 4, 256**2/4, B)
 
-        noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(noisy_images), time_step, rope, mask))
+        noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(noisy_images), timesteps, rope, mask))
 
         sample_images_predicted = self.scheduler.step(noise_pred, timesteps, noisy_images).prev_sample
 
-        return loss(sample_images_encoded, sample_images_predicted)
+        return self.loss(sample_images_encoded, sample_images_predicted)
 
-
-    def encode_text(prompt):
+    def encode_text(self, prompts):
         text_input = self.tokenizer(
-            prompt, padding="max_length",
+            prompts, padding="max_length",
             max_length=self.tokenizer.model_max_length,
             truncation=True,
             return_tensors="pt"
         )
+        text_embeddings = self.text_encoder(text_input)
 
-        text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
+        uncond_input = self.tokenizer(
+            "",
+            padding="max_length",
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
+            return_tensors="pt"
+        )
+        uncond_embeddings = self.text_encoder(uncond_input)
 
-        max_length = text_input.input_ids.shape[-1]
-
-        uncond_input = self.tokenizer([""] * len(prompt), padding="max_length", max_length=max_length, return_tensors="pt")
-        uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
-
-        return torch.cat([uncond_embeddings, text_embeddings])
-
-    def validation_step(self, batch, batch_idx):
-        pass
+        return torch.cat([uncond_embeddings.repeat(len(prompts), 1), text_embeddings], dim=1)
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
