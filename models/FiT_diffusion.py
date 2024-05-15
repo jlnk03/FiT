@@ -6,10 +6,107 @@ from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UniPCMultistepScheduler
+import numpy as np
+from typing import Any, Dict, Optional, Tuple
+from torch import Tensor
+
+from fit import FiT_models, apply_rotary_emb
+
+
 from PIL import Image
 from fit import FiT_models
 import torchvision.transforms as transforms
 from datasets import load_dataset
+
+
+def _precompute_freqs_cis_1d_from_grid(
+    dim: int, pos: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
+) -> np.ndarray:
+    if max_length is not None:
+        # VisionNTK
+        s = max(np.max(pos) / np.sqrt(max_length), 1.0)
+        theta = theta * np.power(s, dim / (dim - 2))
+
+    freqs = 1.0 / \
+        (theta ** (np.arange(0, dim, 2, dtype=np.float32)[: (dim // 2)] / dim))
+    freqs = np.outer(pos, freqs)
+    a = np.cos(freqs)
+    b = np.sin(freqs)  # represent for a + ib
+    freqs_cis = np.stack([a, b], axis=-1)
+    return freqs_cis
+
+
+def _precompute_freqs_cis_2d_from_grid(
+    dim: int, grid: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
+) -> np.ndarray:
+    freqs_cis_w = _precompute_freqs_cis_1d_from_grid(
+        dim // 2, grid[0], theta=theta, max_length=max_length)
+    freqs_cis_h = _precompute_freqs_cis_1d_from_grid(
+        dim // 2, grid[1], theta=theta, max_length=max_length)
+    freqs_cis = np.concatenate([freqs_cis_w, freqs_cis_h], axis=1)
+    return freqs_cis
+
+
+def precompute_freqs_cis_2d(
+    dim: int, nh: int, nw: Optional[int] = None, theta: float = 10000.0, max_length: Optional[int] = None
+) -> np.ndarray:
+    """Precompute the frequency tensor for complex exponentials (cis) with given dimensions, for 2D RoPE
+    referered from 1D RoPE https://github.com/meta-llama/llama and paper `FiT` https://arxiv.org/abs/2402.12376
+
+    If max_length is not None, then a length extrapolation algo. `VisionNTK` from `FiT` will be used for tensor calculation.
+
+    Args:
+        dim: dimension of the frequency tensor
+        nh: image height
+        nw: image width. If it is not given, then `nw` is equal to `nh`. Default: None
+        theta: Scaling factor for frequency computation. Defaults: 10000.0.
+        max_length: If it is None, then the VisionNTK algo. will be applied. Default: None
+    """
+    nw = nh if nw is None else nw
+    grid_h = np.arange(nh, dtype=np.float32)
+    grid_w = np.arange(nw, dtype=np.float32)
+    grid = np.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = np.stack(grid, axis=0)
+
+    grid = grid.reshape([2, nh, nw])
+    freqs_cis = _precompute_freqs_cis_2d_from_grid(
+        dim, grid, theta=theta, max_length=max_length)  # (M, D/2, 2)
+    freqs_cis = np.reshape(freqs_cis, (freqs_cis.shape[0], -1))
+    return freqs_cis
+
+
+def _create_pos_embed(
+    self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
+) -> Tuple[Tensor, int]:
+    # 1, T, D
+    nh, nw = h // p, w // p
+    if method == "rotate":
+        pos_embed_fill = precompute_freqs_cis_2d(
+            embed_dim, nh, nw, max_length=max_length)
+    # else:
+    #     pos_embed_fill = get_2d_sincos_pos_embed(embed_dim, nh, nw)
+
+    if pos_embed_fill.shape[0] > max_length:
+        pos_embed = pos_embed_fill
+    else:
+        pos_embed = np.zeros((max_length, embed_dim), dtype=np.float32)
+        pos_embed[: pos_embed_fill.shape[0]] = pos_embed_fill
+
+    pos_embed = pos_embed[None, ...]
+    pos_embed = Tensor(pos_embed)
+    return pos_embed, pos_embed_fill.shape[0]
+
+
+def _create_mask(self, valid_t: int, max_length: int, n: int) -> Tensor:
+    # 1, T
+    if valid_t > max_length:
+        mask = np.ones((valid_t,), dtype=np.bool_)
+    else:
+        mask = np.zeros((max_length,), dtype=np.bool_)
+        mask[:valid_t] = True
+    mask = np.tile(mask[None, ...], (n, 1))
+    mask = Tensor(mask)
+    return mask
 
 class FiTFusion(pl.LightningModule):
     def __init__(self):
@@ -53,7 +150,7 @@ class FiTFusion(pl.LightningModule):
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
 
         latents = torch.randn(
-            (batch_size, 4, height // 8, width // 8),
+            (batch_size, 4, 256, 256),
             generator=self.generator,
             device=self.device,
         )
@@ -68,9 +165,18 @@ class FiTFusion(pl.LightningModule):
             latent_model_input = self.scheduler.scale_model_input(
                 latent_model_input, timestep=t)
 
+            # timestep of diffusion step
+            time_step = torch.tensor([t] * batch_size, device=self.device)
+
+            patches = self.FiT.patchify(latent_model_input)
+
+            rope = _create_pos_embed(height//8, width//8, 2, 256**2/4, 256)
+
+            mask = _create_mask(height*width/4, 256**2/4, batch_size)
+
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
-            noise_pred = self.FiT(latent_model_input, text_embeddings)
+            noise_pred = self.FiT.construct(patches, time_step, rope, mask)
 
             # perform guidance
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
@@ -79,6 +185,8 @@ class FiTFusion(pl.LightningModule):
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+
+        latents = self.unpatchify(latents)
 
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
@@ -106,7 +214,7 @@ class FiTFusion(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
-    
+
     def train_dataloader(self):
         dataset = self.dataset['train']
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
