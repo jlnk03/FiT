@@ -203,12 +203,13 @@ class FiTFusion(pl.LightningModule):
 
         B, C, H, W = sample_images_encoded.shape
 
-        timesteps_np = np.random.choice(self.inference_steps, size=(B,))
-        timesteps = torch.from_numpy(timesteps_np).long().to(self.device)
+        timesteps = torch.from_numpy(np.random.choice(self.inference_steps, size=(B,))).to(self.device)
 
-        noise = torch.randn(sample_images_encoded.shape) * self.scheduler.init_noise_sigma
+        noise = torch.randn(sample_images_encoded.shape)
 
         noisy_images = self.noise_scheduler.add_noise(sample_images_encoded, noise, timesteps)
+
+        noisy_images = torch.cat([noisy_images] * 2)
 
         rope = _create_pos_embed(H // 8, W // 8, 2, 256 ** 2 / 4, 256)
 

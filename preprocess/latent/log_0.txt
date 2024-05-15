@@ -1,0 +1,6 @@
+[2024-05-16 00:20:06] INFO: vae init
+[2024-05-16 00:20:08] INFO: Scanning images under `dataset`.
+[2024-05-16 00:26:53] INFO: vae init
+[2024-05-16 00:26:54] INFO: Scanning images under `dataset`.
+[2024-05-16 00:27:29] INFO: vae init
+[2024-05-16 00:27:30] INFO: Scanning images under `dataset`.
