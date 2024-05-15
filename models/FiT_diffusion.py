@@ -171,6 +171,8 @@ class FiTFusion(pl.LightningModule):
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
+        latents = self.unpatchify(latents)
+
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
         image = self.vae.decode(latents).sample
