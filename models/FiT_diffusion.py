@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets
+#from torchvision import datasets
 from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -10,9 +10,9 @@ import numpy as np
 from typing import Any, Dict, Optional, Tuple
 from torch import Tensor
 
+
+
 from fit import FiT_models, apply_rotary_emb
-
-
 from PIL import Image
 from fit import FiT_models
 import torchvision.transforms as transforms
