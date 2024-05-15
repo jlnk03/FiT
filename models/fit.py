@@ -1,6 +1,6 @@
 from typing import Any, Dict, Tuple, Type, Union
 import torch
-from torch import Tensor, nn
+# from torch import Tensor, nn
 from torch.nn import functional as F
 
 try:
@@ -8,13 +8,13 @@ try:
 except ImportError:
     from typing_extensions import Literal  # FIXME: python 3.7
 
-# import mindspore as ms
-# from mindspore import Tensor, nn, ops
+import mindspore as ms
+from mindspore import Tensor, nn, ops
 
 from flash_attention import MSFlashAttention
 
-from .dit import GELU, FinalLayer, LabelEmbedder, LayerNorm, Mlp, Optional, TimestepEmbedder
-from .utils import constant_, exists, modulate, normal_, xavier_uniform_
+from dit import GELU, FinalLayer, LabelEmbedder, LayerNorm, Mlp, Optional, TimestepEmbedder
+from utils import constant_, exists, modulate, normal_, xavier_uniform_
 
 __all__ = [
     "FiT",
@@ -45,72 +45,72 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
     return torch.stack([real_part, imag_part], dim=-1)
 
 
-# def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
-#     q_shape = q.shape
-#     k_shape = q.shape
-#     # to complex
-#     q = ops.reshape(q, (q_shape[0], q_shape[1], q_shape[2], -1, 2))
-#     k = ops.reshape(k, (k_shape[0], k_shape[1], k_shape[2], -1, 2))  # b, h, n, d/2, 2
-#     freqs_cis = ops.reshape(freqs_cis, (freqs_cis.shape[0], 1, q_shape[2], -1, 2))  # b, 1, n, d/2, 2
-#     dtype = q.dtype
-#     q = complex_mult(q.to(ms.float32), freqs_cis).to(dtype)
-#     k = complex_mult(k.to(ms.float32), freqs_cis).to(dtype)
-#     # to real
-#     q = ops.reshape(q, q_shape)
-#     k = ops.reshape(k, k_shape)
-#     return q, k
-
-
 def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
     q_shape = q.shape
-    k_shape = k.shape
+    k_shape = q.shape
     # to complex
-    q = q.reshape(q_shape[0], q_shape[1], q_shape[2], -1, 2)
-    k = k.reshape(k_shape[0], k_shape[1], k_shape[2], -1, 2)  # b, h, n, d/2, 2
-    freqs_cis = freqs_cis.reshape(
-        freqs_cis.shape[0], 1, q_shape[2], -1, 2)  # b, 1, n, d/2, 2
+    q = ops.reshape(q, (q_shape[0], q_shape[1], q_shape[2], -1, 2))
+    k = ops.reshape(k, (k_shape[0], k_shape[1], k_shape[2], -1, 2))  # b, h, n, d/2, 2
+    freqs_cis = ops.reshape(freqs_cis, (freqs_cis.shape[0], 1, q_shape[2], -1, 2))  # b, 1, n, d/2, 2
     dtype = q.dtype
-    q = complex_mult(q.to(torch.float32), freqs_cis).to(dtype)
-    k = complex_mult(k.to(torch.float32), freqs_cis).to(dtype)
+    q = complex_mult(q.to(ms.float32), freqs_cis).to(dtype)
+    k = complex_mult(k.to(ms.float32), freqs_cis).to(dtype)
     # to real
-    q = q.reshape(q_shape)
-    k = k.reshape(k_shape)
+    q = ops.reshape(q, q_shape)
+    k = ops.reshape(k, k_shape)
     return q, k
 
 
-# class Attention(nn.Cell):
-#     def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
-#         super().__init__()
-#         self.scale = dim_head**-0.5
-#         self.attn_drop = nn.Dropout(p=attn_drop)
-#         self.bmm = ops.BatchMatMul(transpose_b=True)
+# def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
+#     q_shape = q.shape
+#     k_shape = k.shape
+#     # to complex
+#     q = q.reshape(q_shape[0], q_shape[1], q_shape[2], -1, 2)
+#     k = k.reshape(k_shape[0], k_shape[1], k_shape[2], -1, 2)  # b, h, n, d/2, 2
+#     freqs_cis = freqs_cis.reshape(
+#         freqs_cis.shape[0], 1, q_shape[2], -1, 2)  # b, 1, n, d/2, 2
+#     dtype = q.dtype
+#     q = complex_mult(q.to(torch.float32), freqs_cis).to(dtype)
+#     k = complex_mult(k.to(torch.float32), freqs_cis).to(dtype)
+#     # to real
+#     q = q.reshape(q_shape)
+#     k = k.reshape(k_shape)
+#     return q, k
 
-#     def construct(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-#         sim = self.bmm(q, k) * self.scale
 
-#         # use fp32 for exponential inside
-#         sim = sim.to(ms.float32)
-#         if exists(mask):
-#             mask = mask[:, None, None, :]
-#             sim = ops.masked_fill(sim, ~mask, -ms.numpy.inf)
-#         attn = ops.softmax(sim, axis=-1).astype(v.dtype)
-#         attn = self.attn_drop(attn)
-#         out = ops.matmul(attn, v)
-#         return out
-
-class Attention(nn.Module):
+class Attention(nn.Cell):
     def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
         super().__init__()
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
         self.attn_drop = nn.Dropout(p=attn_drop)
+        self.bmm = ops.BatchMatMul(transpose_b=True)
 
-    def forward(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-        sim = torch.matmul(q, k.transpose(-2, -1)) * self.scale
-        if mask is not None:
-            sim = sim.masked_fill(~mask[:, None, None, :], float('-inf'))
-        attn = F.softmax(sim, dim=-1)
+    def construct(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+        sim = self.bmm(q, k) * self.scale
+
+        # use fp32 for exponential inside
+        sim = sim.to(ms.float32)
+        if exists(mask):
+            mask = mask[:, None, None, :]
+            sim = ops.masked_fill(sim, ~mask, -ms.numpy.inf)
+        attn = ops.softmax(sim, axis=-1).astype(v.dtype)
         attn = self.attn_drop(attn)
-        return torch.matmul(attn, v)
+        out = ops.matmul(attn, v)
+        return out
+
+# class Attention(nn.Module):
+#     def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
+#         super().__init__()
+#         self.scale = dim_head ** -0.5
+#         self.attn_drop = nn.Dropout(p=attn_drop)
+
+#     def forward(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+#         sim = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+#         if mask is not None:
+#             sim = sim.masked_fill(~mask[:, None, None, :], float('-inf'))
+#         attn = F.softmax(sim, dim=-1)
+#         attn = self.attn_drop(attn)
+#         return torch.matmul(attn, v)
 
 
 class SelfAttention(nn.Cell):
@@ -143,60 +143,37 @@ class SelfAttention(nn.Cell):
         else:
             self.flash_attention = None
 
-    # @staticmethod
-    # def _rearange_out(x: Tensor) -> Tensor:
-    #     # (b, h, n, d) -> (b, n, h*d)
-    #     b, _, n, _ = x.shape
-    #     x = ops.transpose(x, (0, 2, 1, 3))
-    #     x = ops.reshape(x, (b, n, -1))
-    #     return x
-
     @staticmethod
     def _rearange_out(x: Tensor) -> Tensor:
         # (b, h, n, d) -> (b, n, h*d)
         b, _, n, _ = x.shape
-        # Transpose the head and sequence length dimensions
-        x = x.transpose(1, 2)
-        x = x.reshape(b, n, -1)  # Flatten the last two dimensions
+        x = ops.transpose(x, (0, 2, 1, 3))
+        x = ops.reshape(x, (b, n, -1))
         return x
 
-    # def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
-    #     h = self.num_heads
-    #     B, N, _ = x.shape
-
-    #     # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
-    #     qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute((2, 0, 3, 1, 4))
-    #     q, k, v = qkv.unbind(0)
-
-    #     if self.apply_rotate_embed:
-    #         q, k = apply_rotary_emb(q, k, freqs_cis)
-
-    #     # FIXME: drop the shape requiremnt when flash-attention works ok
-    #     if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
-    #         mask = ops.logical_and(mask[:, None, :], mask[:, :, None])
-    #         out = self.flash_attention(q, k, v, ~mask)
-    #     else:
-    #         out = self.attention(q, k, v, mask=mask)
-
+    # @staticmethod
+    # def _rearange_out(x: Tensor) -> Tensor:
     #     # (b, h, n, d) -> (b, n, h*d)
-    #     out = self._rearange_out(out)
-
-    #     return self.proj_drop(self.proj(out))
+    #     b, _, n, _ = x.shape
+    #     # Transpose the head and sequence length dimensions
+    #     x = x.transpose(1, 2)
+    #     x = x.reshape(b, n, -1)  # Flatten the last two dimensions
+    #     return x
 
     def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
         h = self.num_heads
         B, N, _ = x.shape
 
         # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
-        qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute(2, 0, 3, 1, 4)
+        qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute((2, 0, 3, 1, 4))
         q, k, v = qkv.unbind(0)
 
         if self.apply_rotate_embed:
             q, k = apply_rotary_emb(q, k, freqs_cis)
 
+        # FIXME: drop the shape requiremnt when flash-attention works ok
         if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
-            # Using PyTorch logical and
-            mask = mask[:, None, :] & mask[:, :, None]
+            mask = ops.logical_and(mask[:, None, :], mask[:, :, None])
             out = self.flash_attention(q, k, v, ~mask)
         else:
             out = self.attention(q, k, v, mask=mask)
@@ -205,6 +182,29 @@ class SelfAttention(nn.Cell):
         out = self._rearange_out(out)
 
         return self.proj_drop(self.proj(out))
+
+    # def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
+    #     h = self.num_heads
+    #     B, N, _ = x.shape
+
+    #     # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
+    #     qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute(2, 0, 3, 1, 4)
+    #     q, k, v = qkv.unbind(0)
+
+    #     if self.apply_rotate_embed:
+    #         q, k = apply_rotary_emb(q, k, freqs_cis)
+
+    #     if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
+    #         # Using PyTorch logical and
+    #         mask = mask[:, None, :] & mask[:, :, None]
+    #         out = self.flash_attention(q, k, v, ~mask)
+    #     else:
+    #         out = self.attention(q, k, v, mask=mask)
+
+    #     # (b, h, n, d) -> (b, n, h*d)
+    #     out = self._rearange_out(out)
+
+    #     return self.proj_drop(self.proj(out))
 
 
 class SwiGLU(nn.Cell):
@@ -384,18 +384,6 @@ class FiT(nn.Cell):
         constant_(self.final_layer.linear.weight, 0)
         constant_(self.final_layer.linear.bias, 0)
 
-    # def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
-    #     """
-    #     x: (N, T, patch_size**2 * C)
-    #     imgs: (N, C, H, W)
-    #     """
-    #     c = self.out_channels
-    #     nh, nw = h // self.patch_size, w // self.patch_size
-    #     x = x.reshape((x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
-    #     x = ops.transpose(x, (0, 5, 1, 3, 2, 4))
-    #     imgs = x.reshape((x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
-    #     return imgs
-
     def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
         """
         x: (N, T, patch_size**2 * C)
@@ -403,28 +391,40 @@ class FiT(nn.Cell):
         """
         c = self.out_channels
         nh, nw = h // self.patch_size, w // self.patch_size
-        x = x.reshape(
-            (x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
-        x = x.permute(0, 5, 1, 3, 2, 4)  # Reorder dimensions
-        imgs = x.reshape(
-            (x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
+        x = x.reshape((x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
+        x = ops.transpose(x, (0, 5, 1, 3, 2, 4))
+        imgs = x.reshape((x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
         return imgs
 
-    # def patchify(self, x: Tensor) -> Tensor:
-    #     N, C, H, W = x.shape
-    #     nh, nw = H // self.patch_size, W // self.patch_size
-    #     x = ops.reshape(x, (N, C, nh, self.patch_size, nw, self.patch_size))
-    #     x = ops.transpose(x, (0, 2, 4, 3, 5, 1))  # N, nh, nw, patch, patch, C
-    #     x = ops.reshape(x, (N, nh * nw, -1))
-    #     return x
+    # def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
+    #     """
+    #     x: (N, T, patch_size**2 * C)
+    #     imgs: (N, C, H, W)
+    #     """
+    #     c = self.out_channels
+    #     nh, nw = h // self.patch_size, w // self.patch_size
+    #     x = x.reshape(
+    #         (x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
+    #     x = x.permute(0, 5, 1, 3, 2, 4)  # Reorder dimensions
+    #     imgs = x.reshape(
+    #         (x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
+    #     return imgs
 
     def patchify(self, x: Tensor) -> Tensor:
         N, C, H, W = x.shape
         nh, nw = H // self.patch_size, W // self.patch_size
-        x = x.reshape(N, C, nh, self.patch_size, nw, self.patch_size)
-        x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
-        x = x.reshape(N, nh * nw, -1)
+        x = ops.reshape(x, (N, C, nh, self.patch_size, nw, self.patch_size))
+        x = ops.transpose(x, (0, 2, 4, 3, 5, 1))  # N, nh, nw, patch, patch, C
+        x = ops.reshape(x, (N, nh * nw, -1))
         return x
+
+    # def patchify(self, x: Tensor) -> Tensor:
+    #     N, C, H, W = x.shape
+    #     nh, nw = H // self.patch_size, W // self.patch_size
+    #     x = x.reshape(N, C, nh, self.patch_size, nw, self.patch_size)
+    #     x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
+    #     x = x.reshape(N, nh * nw, -1)
+    #     return x
 
     def construct(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor) -> Tensor:
         """
@@ -458,24 +458,8 @@ class FiT(nn.Cell):
         x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
         return x
 
-    # @ms.jit
-    # def construct_with_cfg(
-    #     self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
-    # ) -> Tensor:
-    #     """
-    #     Forward pass of FiT, but also batches the unconditional forward pass for classifier-free guidance.
-    #     """
-    #     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
-    #     half = x[: len(x) // 2]
-    #     combined = ops.cat([half, half], axis=0)
-    #     model_out = self.construct(combined, t, y, pos, mask)
-    #     eps, rest = model_out[:, : self.in_channels], model_out[:, self.in_channels :]
-    #     cond_eps, uncond_eps = ops.split(eps, len(eps) // 2, axis=0)
-    #     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-    #     eps = ops.cat([half_eps, half_eps], axis=0)
-    #     return ops.cat([eps, rest], axis=1)
-
-    def forward_with_cfg(
+    @ms.jit
+    def construct_with_cfg(
         self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
     ) -> Tensor:
         """
@@ -483,14 +467,30 @@ class FiT(nn.Cell):
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
-        combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y, pos, mask)
-        eps, rest = model_out[:,
-                              : self.in_channels], model_out[:, self.in_channels:]
-        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+        combined = ops.cat([half, half], axis=0)
+        model_out = self.construct(combined, t, y, pos, mask)
+        eps, rest = model_out[:, : self.in_channels], model_out[:, self.in_channels :]
+        cond_eps, uncond_eps = ops.split(eps, len(eps) // 2, axis=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-        eps = torch.cat([half_eps, half_eps], dim=0)
-        return torch.cat([eps, rest], dim=1)
+        eps = ops.cat([half_eps, half_eps], axis=0)
+        return ops.cat([eps, rest], axis=1)
+
+    # def forward_with_cfg(
+    #     self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
+    # ) -> Tensor:
+    #     """
+    #     Forward pass of FiT, but also batches the unconditional forward pass for classifier-free guidance.
+    #     """
+    #     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
+    #     half = x[: len(x) // 2]
+    #     combined = torch.cat([half, half], dim=0)
+    #     model_out = self.forward(combined, t, y, pos, mask)
+    #     eps, rest = model_out[:,
+    #                           : self.in_channels], model_out[:, self.in_channels:]
+    #     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+    #     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+    #     eps = torch.cat([half_eps, half_eps], dim=0)
+    #     return torch.cat([eps, rest], dim=1)
 
 
 def FiT_XL_2(**kwargs):
