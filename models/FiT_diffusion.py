@@ -135,7 +135,7 @@ class FiTFusion(pl.LightningModule):
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
 
         latents = torch.randn(
-            (batch_size, 4, height // 8, width // 8),
+            (batch_size, 4, 256, 256),
             generator=self.generator,
             device=self.device,
         )
