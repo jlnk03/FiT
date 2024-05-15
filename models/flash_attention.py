@@ -5,7 +5,7 @@ from typing import List, Optional
 import mindspore as ms
 from mindspore import nn, ops
 
-from mindone.utils.version_control import check_valid_flash_attention, choose_flash_attention_dtype
+from version_control import check_valid_flash_attention, choose_flash_attention_dtype
 
 FLASH_IS_AVAILABLE = check_valid_flash_attention()
 USE_NEW_FA = False

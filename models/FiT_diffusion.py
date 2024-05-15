@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from torchvision import datasets
 from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -11,6 +12,16 @@ from torch import Tensor
 
 from fit import FiT_models, apply_rotary_emb
 
+<<<<<<< HEAD
+=======
+
+from PIL import Image
+from fit import FiT_models
+import torchvision.transforms as transforms
+from datasets import load_dataset
+
+
+>>>>>>> 6efcabbeae60601e520e9f0eeba10977d9feb80b
 def _precompute_freqs_cis_1d_from_grid(
     dim: int, pos: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
 ) -> np.ndarray:
@@ -100,7 +111,6 @@ def _create_mask(self, valid_t: int, max_length: int, n: int) -> Tensor:
     mask = Tensor(mask)
     return mask
 
-
 class FiTFusion(pl.LightningModule):
     def __init__(self):
         super().__init__()
@@ -118,6 +128,15 @@ class FiTFusion(pl.LightningModule):
             "CompVis/stable-diffusion-v1-4", subfolder="scheduler")
         self.FiT = FiT_models['FiT-B/2']()
         self.generator = torch.Generator(device=self.device).manual_seed(42)
+        self.batch_size = 64
+        #download dataset
+        self.dataset = load_dataset("imagenet-1k")
+        self.transform = transforms.Compose([transforms.Lambda(lambda img: img.resize((256, img.height)) if img.width > 256 else img),
+                                             transforms.Lambda(lambda img: img.resize((img.width, 256)) if img.height > 256 else img),
+                                             transforms.RandomHorizontalFlip(),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5], inplace=True)])
+
 
         self.loss = torch.nn.MSELoss()
 
@@ -224,10 +243,16 @@ class FiTFusion(pl.LightningModule):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
 
     def train_dataloader(self):
-        pass
+        dataset = self.dataset['train']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
 
     def val_dataloader(self):
-        pass
+        dataset = self.dataset['validation']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
 
     def test_dataloader(self):
-        pass
+        dataset = self.dataset['test']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
