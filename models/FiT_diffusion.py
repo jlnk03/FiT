@@ -157,7 +157,7 @@ class FiTFusion(pl.LightningModule):
 
             rope = _create_pos_embed(height//8, width//8, 2, 256**2/4, 256)
 
-            mask = _create_mask(t, 256**2/4, batch_size)
+            mask = _create_mask(height*width/4, 256**2/4, batch_size)
 
             # predict the noise residual
             # TODO: pass correct parameters such as mask, noise, etc.
