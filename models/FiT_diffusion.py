@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from torchvision import datasets
 from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -10,6 +11,12 @@ from typing import Any, Dict, Optional, Tuple
 from torch import Tensor
 
 from fit import FiT_models, apply_rotary_emb
+
+
+from PIL import Image
+from fit import FiT_models
+import torchvision.transforms as transforms
+from datasets import load_dataset
 
 
 def _precompute_freqs_cis_1d_from_grid(
@@ -101,7 +108,6 @@ def _create_mask(self, valid_t: int, max_length: int, n: int) -> Tensor:
     mask = Tensor(mask)
     return mask
 
-
 class FiTFusion(pl.LightningModule):
     def __init__(self):
         super().__init__()
@@ -119,6 +125,15 @@ class FiTFusion(pl.LightningModule):
             "CompVis/stable-diffusion-v1-4", subfolder="scheduler")
         self.FiT = FiT_models['FiT-B/2']()
         self.generator = torch.Generator(device=self.device).manual_seed(42)
+        self.batch_size = 64
+        #download dataset
+        self.dataset = load_dataset("imagenet-1k")
+        self.transform = transforms.Compose([transforms.Lambda(lambda img: img.resize((256, img.height)) if img.width > 256 else img),
+                                             transforms.Lambda(lambda img: img.resize((img.width, 256)) if img.height > 256 else img),
+                                             transforms.RandomHorizontalFlip(),
+                                             transforms.ToTensor(), 
+                                             transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5], inplace=True)])
+
 
     def forward(self, prompt='a photograph of an astronaut riding a horse', inference_steps=25, guidance_scale=7.5, height=256, width=256):
         text_input = self.tokenizer(
@@ -189,6 +204,10 @@ class FiTFusion(pl.LightningModule):
         # TODO: Implement the rest of the training loop
 
         pass
+    
+    
+        
+        
 
     def validation_step(self, batch, batch_idx):
         pass
@@ -197,10 +216,16 @@ class FiTFusion(pl.LightningModule):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
 
     def train_dataloader(self):
-        pass
+        dataset = self.dataset['train']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
 
     def val_dataloader(self):
-        pass
+        dataset = self.dataset['validation']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
 
     def test_dataloader(self):
-        pass
+        dataset = self.dataset['test']
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
+        return dataloader
