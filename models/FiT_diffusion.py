@@ -12,16 +12,12 @@ from torch import Tensor
 
 from fit import FiT_models, apply_rotary_emb
 
-<<<<<<< HEAD
-=======
-
 from PIL import Image
 from fit import FiT_models
 import torchvision.transforms as transforms
 from datasets import load_dataset
 
 
->>>>>>> 6efcabbeae60601e520e9f0eeba10977d9feb80b
 def _precompute_freqs_cis_1d_from_grid(
     dim: int, pos: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
 ) -> np.ndarray:
