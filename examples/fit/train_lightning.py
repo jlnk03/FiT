@@ -13,11 +13,13 @@ from glob import glob
 import argparse
 import os
 
+from data.imagenet_dataset import create_dataloader_imagenet_latent
+
 from models.fit import FiT_models
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 
-class DiTModel(LightningModule):
+class FiTModel(LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -27,7 +29,6 @@ class DiTModel(LightningModule):
         )
         self.ema = deepcopy(self.model)
         self.diffusion = create_diffusion(timestep_respacing="")
-        self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
         self.save_hyperparameters()
 
     def configure_optimizers(self):
@@ -41,7 +42,6 @@ class DiTModel(LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        x = self.vae.encode(x).latent_dist.sample().mul_(0.18215)
         t = torch.randint(0, self.diffusion.num_timesteps, (x.shape[0],), device=self.device)
         model_kwargs = dict(y=y)
         loss_dict = self.diffusion.training_losses(self.model, x, t, model_kwargs)
@@ -66,20 +66,23 @@ class DiTModel(LightningModule):
             torch.save(checkpoint, checkpoint_path)
 
     def train_dataloader(self):
-        transform = transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
-        ])
-        dataset = ImageFolder(self.args.data_path, transform=transform)
-        return DataLoader(
-            dataset,
-            batch_size=self.args.global_batch_size // torch.cuda.device_count(),
+
+        data_config = dict(
+            data_folder=args.data_path,
+            sample_size=args.image_size,
+            batch_size=args.train_batch_size,
             shuffle=True,
-            num_workers=self.args.num_workers,
-            pin_memory=True,
-            drop_last=True
+            num_parallel_workers=args.num_parallel_workers,
+            patch_size=args.patch_size,
+            embed_dim=args.embed_dim,
+            embed_method=args.embed_method,
         )
+                
+        dataset = create_dataloader_imagenet_latent(
+            data_config,
+        )
+          
+        return dataset
 
 
 def main(args):
@@ -104,7 +107,7 @@ def main(args):
         precision=16
     )
 
-    model = DiTModel(args)
+    model = FiTModel(args)
     trainer.fit(model)
 
 

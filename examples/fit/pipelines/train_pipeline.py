@@ -66,7 +66,7 @@ class NetworkWithLoss(nn.Module):
         vb = pt.where((t == 0), decoder_nll, kl)
         return vb
 
-    def construct(
+    def forward(
         self,
         x: Tensor,
         labels: Tensor,
