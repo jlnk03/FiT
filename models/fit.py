@@ -461,7 +461,23 @@ class FiT(nn.Module):
         x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
         return x
 
-    @ms.jit
+    # @ms.jit
+    # def construct_with_cfg(
+    #     self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
+    # ) -> Tensor:
+    #     """
+    #     Forward pass of FiT, but also batches the unconditional forward pass for classifier-free guidance.
+    #     """
+    #     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
+    #     half = x[: len(x) // 2]
+    #     combined = ops.cat([half, half], axis=0)
+    #     model_out = self.construct(combined, t, y, pos, mask)
+    #     eps, rest = model_out[:, : self.in_channels], model_out[:, self.in_channels :]
+    #     cond_eps, uncond_eps = ops.split(eps, len(eps) // 2, axis=0)
+    #     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
+    #     eps = ops.cat([half_eps, half_eps], axis=0)
+    #     return ops.cat([eps, rest], axis=1)
+
     def construct_with_cfg(
         self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
     ) -> Tensor:
@@ -470,30 +486,14 @@ class FiT(nn.Module):
         """
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
-        combined = ops.cat([half, half], axis=0)
-        model_out = self.construct(combined, t, y, pos, mask)
-        eps, rest = model_out[:, : self.in_channels], model_out[:, self.in_channels :]
-        cond_eps, uncond_eps = ops.split(eps, len(eps) // 2, axis=0)
+        combined = torch.cat([half, half], dim=0)
+        model_out = self.forward(combined, t, y, pos, mask)
+        eps, rest = model_out[:,
+                              : self.in_channels], model_out[:, self.in_channels:]
+        cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
         half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-        eps = ops.cat([half_eps, half_eps], axis=0)
-        return ops.cat([eps, rest], axis=1)
-
-    # def forward_with_cfg(
-    #     self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
-    # ) -> Tensor:
-    #     """
-    #     Forward pass of FiT, but also batches the unconditional forward pass for classifier-free guidance.
-    #     """
-    #     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
-    #     half = x[: len(x) // 2]
-    #     combined = torch.cat([half, half], dim=0)
-    #     model_out = self.forward(combined, t, y, pos, mask)
-    #     eps, rest = model_out[:,
-    #                           : self.in_channels], model_out[:, self.in_channels:]
-    #     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
-    #     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
-    #     eps = torch.cat([half_eps, half_eps], dim=0)
-    #     return torch.cat([eps, rest], dim=1)
+        eps = torch.cat([half_eps, half_eps], dim=0)
+        return torch.cat([eps, rest], dim=1)
 
 
 def FiT_XL_2(**kwargs):
