@@ -114,7 +114,7 @@ class Attention(nn.Module):
         return torch.matmul(attn, v)
 
 
-class SelfAttention(nn.Cell):
+class SelfAttention(nn.Module):
     def __init__(
         self,
         dim: int,
@@ -139,11 +139,10 @@ class SelfAttention(nn.Cell):
         self.apply_rotate_embed = apply_rotate_embed
 
         if enable_flash_attention:
-            self.flash_attention = MSFlashAttention(
-                head_dim=head_dim, head_num=num_heads, attention_dropout=attn_drop)
+            # self.flash_attention = MSFlashAttention(
+            #     head_dim=head_dim, head_num=num_heads, attention_dropout=attn_drop)
 
-            # self.flash_attention = nn.scaled_dot_product_attention(
-            #     head_dim, num_heads, dropout_p=attn_drop)
+            self.flash_attention = nn.MultiheadAttention(embed_dim=head_dim, num_heads=num_heads, dropout=attn_drop)
         else:
             self.flash_attention = None
 
@@ -187,7 +186,7 @@ class SelfAttention(nn.Cell):
 
     #     return self.proj_drop(self.proj(out))
 
-    def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
         h = self.num_heads
         B, N, _ = x.shape
 
@@ -201,7 +200,7 @@ class SelfAttention(nn.Cell):
         if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
             # Using PyTorch logical and
             mask = mask[:, None, :] & mask[:, :, None]
-            out = self.flash_attention(q, k, v, ~mask)
+            out = self.flash_attention(q, k, v, attn_mask=~mask)
         else:
             out = self.attention(q, k, v, mask=mask)
 
@@ -211,7 +210,7 @@ class SelfAttention(nn.Cell):
         return self.proj_drop(self.proj(out))
 
 
-class SwiGLU(nn.Cell):
+class SwiGLU(nn.Module):
     def __init__(
         self,
         in_features: int,
@@ -235,7 +234,7 @@ class SwiGLU(nn.Cell):
         self.fc2 = nn.Linear(hidden_features, out_features, has_bias=has_bias)
         self.drop2 = nn.Dropout(p=drop)
 
-    def construct(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         x_gate = self.fc1_g(x)
         x = self.fc1_x(x)
         x = self.act(x_gate) * x
@@ -246,7 +245,7 @@ class SwiGLU(nn.Cell):
         return x
 
 
-class FiTBlock(nn.Cell):
+class FiTBlock(nn.Module):
     """
     A FiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
     """
@@ -284,7 +283,7 @@ class FiTBlock(nn.Cell):
         self.adaLN_modulation = nn.SequentialCell(
             nn.SiLU(), nn.Dense(hidden_size, 6 * hidden_size, has_bias=True))
 
-    def construct(
+    def forward(
         self, x: Tensor, c: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None
     ) -> Tensor:
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(
@@ -298,7 +297,7 @@ class FiTBlock(nn.Cell):
         return x
 
 
-class FiT(nn.Cell):
+class FiT(nn.Module):
     """
     FiT: Flexible Vision Transformer for Diffusion Model
     https://arxiv.org/abs/2402.12376
@@ -430,7 +429,7 @@ class FiT(nn.Cell):
     #     x = x.reshape(N, nh * nw, -1)
     #     return x
 
-    def construct(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor) -> Tensor:
         """
         Forward pass of FiT.
         x: (N, C, H, W) tensor of latent token
