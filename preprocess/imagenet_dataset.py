@@ -1,14 +1,12 @@
 import logging
 import os
 import random
+from typing import Dict, List, Optional, Tuple
 
-import mindspore as ms
 import numpy as np
-
-from typing import Dict, List, Tuple
-
 from PIL import Image
 
+import mindspore as ms
 from mindspore.dataset.transforms import Compose, vision
 
 from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
@@ -47,13 +45,14 @@ class _ResizeByMaxValue:
 class ImageNetWithPathIterator:
     def __init__(self, config) -> None:
         self.image_paths = self._inspect_images(config["data_folder"])
-        self.transform = self._create_transform(max_size=config.get("sample_size", 256), patch_size=config.get("patch_size", 2))
+        self.transform = self._create_transform(
+            max_size=config.get("sample_size", 256), patch_size=config.get("patch_size", 2)
+        )
 
     def _inspect_images(self, root: str) -> List[str]:
         images_info = list()
 
         _logger.info(f"Scanning images under `{root}`.")
-
         for dirpath, _, filenames in os.walk(root):
             for f in filenames:
                 _, ext = os.path.splitext(f)
@@ -65,16 +64,16 @@ class ImageNetWithPathIterator:
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         images_info = sorted(images_info)
-
         return images_info
 
     def _create_transform(self, max_size: int = 256, patch_size: int = 2):
         operations = Compose(
-            [_ResizeByMaxValue(max_size=max_size, patch_size=patch_size),
-            vision.HWC2CHW(),
-            vision.Normalize([127.5, 127.5, 127.5], [127.5, 127.5, 127.5], is_hwc=False)]
+            [
+                _ResizeByMaxValue(max_size=max_size, patch_size=patch_size),
+                vision.HWC2CHW(),
+                vision.Normalize([127.5, 127.5, 127.5], [127.5, 127.5, 127.5], is_hwc=False),
+            ]
         )
-
         return operations
 
     def __len__(self):
@@ -113,14 +112,12 @@ class ImageNetLatentIterator:
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         latent_info = sorted(latent_info, key=lambda x: x["path"])
-
         return latent_info
 
     def _create_label_mapping(self, latent_info: List[Dict[str, str]]):
         labels = set([x["label"] for x in latent_info])
         labels = sorted(list(labels))
         labels = dict(zip(labels, np.arange(len(labels), dtype=np.int32)))
-
         return labels
 
     def __len__(self):
@@ -131,7 +128,6 @@ class ImageNetLatentIterator:
             # perform a random horizontal flip in latent domain
             # mimic the effect of horizontal flip in image (not exactly identical)
             latent = latent[..., ::-1]
-
         return latent
 
     def _patchify(self, latent: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -146,7 +142,6 @@ class ImageNetLatentIterator:
             pos = precompute_freqs_cis_2d(self.embed_dim, nh, nw).astype(np.float32)
         else:
             pos = get_2d_sincos_pos_embed(self.embed_dim, nh, nw).astype(np.float32)
-
         return latent, pos
 
     def __getitem__(self, idx):
@@ -163,31 +158,38 @@ class ImageNetLatentIterator:
 
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
-
         return latent, label, pos, mask
 
 
-def create_dataloader_imagenet_preprocessing(config):
+def create_dataloader_imagenet_preprocessing(
+    config,
+):
     dataset = ImageNetWithPathIterator(config)
-    dataset = ms.dataset.GeneratorDataset(dataset, column_names=["image", "path"])
+    dataset = ms.dataset.GeneratorDataset(
+        dataset,
+        column_names=["image", "path"],
+        shuffle=config["shuffle"],
+    )
     dataset = dataset.batch(1)
-
     return dataset
 
 
-def create_dataloader_imagenet_latent(config):
+def create_dataloader_imagenet_latent(
+    config,
+):
     dataset = ImageNetLatentIterator(config)
-    dataset = ms.dataset.GeneratorDataset(dataset, column_names=["latent", "label", "pos", "mask"])
+    dataset = ms.dataset.GeneratorDataset(
+        dataset,
+        column_names=["latent", "label", "pos", "mask"],
+        shuffle=config["shuffle"],
+    )
 
     sample_size = config.get("sample_size", 256)
     patch_size = config.get("patch_size", 2)
-
-    vae_scale = 0.18215
-    C = 4
-
+    vae_scale = 8
     max_length = sample_size * sample_size // patch_size // patch_size // vae_scale // vae_scale
-
     embed_dim = config.get("embed_dim", 72)
+    C = 4
 
     pad_info = {
         "latent": ([max_length, patch_size * patch_size * C], 0),
@@ -197,5 +199,4 @@ def create_dataloader_imagenet_latent(config):
     }
 
     dataset = dataset.padded_batch(config["batch_size"], drop_remainder=True, pad_info=pad_info)
-
     return dataset
