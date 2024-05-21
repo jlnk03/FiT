@@ -9,7 +9,8 @@ except ImportError:
     from typing_extensions import Literal  # FIXME: python 3.7
 
 import mindspore as ms
-from mindspore import Tensor, nn, ops
+# from mindspore import Tensor, nn, ops
+from torch import Tensor, nn
 
 from flash_attention import MSFlashAttention
 
@@ -45,72 +46,72 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
     return torch.stack([real_part, imag_part], dim=-1)
 
 
-def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
-    q_shape = q.shape
-    k_shape = q.shape
-    # to complex
-    q = ops.reshape(q, (q_shape[0], q_shape[1], q_shape[2], -1, 2))
-    k = ops.reshape(k, (k_shape[0], k_shape[1], k_shape[2], -1, 2))  # b, h, n, d/2, 2
-    freqs_cis = ops.reshape(freqs_cis, (freqs_cis.shape[0], 1, q_shape[2], -1, 2))  # b, 1, n, d/2, 2
-    dtype = q.dtype
-    q = complex_mult(q.to(ms.float32), freqs_cis).to(dtype)
-    k = complex_mult(k.to(ms.float32), freqs_cis).to(dtype)
-    # to real
-    q = ops.reshape(q, q_shape)
-    k = ops.reshape(k, k_shape)
-    return q, k
-
-
 # def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
 #     q_shape = q.shape
-#     k_shape = k.shape
+#     k_shape = q.shape
 #     # to complex
-#     q = q.reshape(q_shape[0], q_shape[1], q_shape[2], -1, 2)
-#     k = k.reshape(k_shape[0], k_shape[1], k_shape[2], -1, 2)  # b, h, n, d/2, 2
-#     freqs_cis = freqs_cis.reshape(
-#         freqs_cis.shape[0], 1, q_shape[2], -1, 2)  # b, 1, n, d/2, 2
+#     q = ops.reshape(q, (q_shape[0], q_shape[1], q_shape[2], -1, 2))
+#     k = ops.reshape(k, (k_shape[0], k_shape[1], k_shape[2], -1, 2))  # b, h, n, d/2, 2
+#     freqs_cis = ops.reshape(freqs_cis, (freqs_cis.shape[0], 1, q_shape[2], -1, 2))  # b, 1, n, d/2, 2
 #     dtype = q.dtype
-#     q = complex_mult(q.to(torch.float32), freqs_cis).to(dtype)
-#     k = complex_mult(k.to(torch.float32), freqs_cis).to(dtype)
+#     q = complex_mult(q.to(ms.float32), freqs_cis).to(dtype)
+#     k = complex_mult(k.to(ms.float32), freqs_cis).to(dtype)
 #     # to real
-#     q = q.reshape(q_shape)
-#     k = k.reshape(k_shape)
+#     q = ops.reshape(q, q_shape)
+#     k = ops.reshape(k, k_shape)
 #     return q, k
 
 
-class Attention(nn.Cell):
-    def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
-        super().__init__()
-        self.scale = dim_head**-0.5
-        self.attn_drop = nn.Dropout(p=attn_drop)
-        self.bmm = ops.BatchMatMul(transpose_b=True)
+def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
+    q_shape = q.shape
+    k_shape = k.shape
+    # to complex
+    q = q.reshape(q_shape[0], q_shape[1], q_shape[2], -1, 2)
+    k = k.reshape(k_shape[0], k_shape[1], k_shape[2], -1, 2)  # b, h, n, d/2, 2
+    freqs_cis = freqs_cis.reshape(
+        freqs_cis.shape[0], 1, q_shape[2], -1, 2)  # b, 1, n, d/2, 2
+    dtype = q.dtype
+    q = complex_mult(q.to(torch.float32), freqs_cis).to(dtype)
+    k = complex_mult(k.to(torch.float32), freqs_cis).to(dtype)
+    # to real
+    q = q.reshape(q_shape)
+    k = k.reshape(k_shape)
+    return q, k
 
-    def construct(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-        sim = self.bmm(q, k) * self.scale
 
-        # use fp32 for exponential inside
-        sim = sim.to(ms.float32)
-        if exists(mask):
-            mask = mask[:, None, None, :]
-            sim = ops.masked_fill(sim, ~mask, -ms.numpy.inf)
-        attn = ops.softmax(sim, axis=-1).astype(v.dtype)
-        attn = self.attn_drop(attn)
-        out = ops.matmul(attn, v)
-        return out
-
-# class Attention(nn.Module):
+# class Attention(nn.Cell):
 #     def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
 #         super().__init__()
-#         self.scale = dim_head ** -0.5
+#         self.scale = dim_head**-0.5
 #         self.attn_drop = nn.Dropout(p=attn_drop)
+#         self.bmm = ops.BatchMatMul(transpose_b=True)
 
-#     def forward(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-#         sim = torch.matmul(q, k.transpose(-2, -1)) * self.scale
-#         if mask is not None:
-#             sim = sim.masked_fill(~mask[:, None, None, :], float('-inf'))
-#         attn = F.softmax(sim, dim=-1)
+#     def construct(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+#         sim = self.bmm(q, k) * self.scale
+
+#         # use fp32 for exponential inside
+#         sim = sim.to(ms.float32)
+#         if exists(mask):
+#             mask = mask[:, None, None, :]
+#             sim = ops.masked_fill(sim, ~mask, -ms.numpy.inf)
+#         attn = ops.softmax(sim, axis=-1).astype(v.dtype)
 #         attn = self.attn_drop(attn)
-#         return torch.matmul(attn, v)
+#         out = ops.matmul(attn, v)
+#         return out
+
+class Attention(nn.Module):
+    def __init__(self, dim_head: int, attn_drop: float = 0.0) -> None:
+        super().__init__()
+        self.scale = dim_head ** -0.5
+        self.attn_drop = nn.Dropout(p=attn_drop)
+
+    def forward(self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+        sim = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        if mask is not None:
+            sim = sim.masked_fill(~mask[:, None, None, :], float('-inf'))
+        attn = F.softmax(sim, dim=-1)
+        attn = self.attn_drop(attn)
+        return torch.matmul(attn, v)
 
 
 class SelfAttention(nn.Cell):
@@ -130,8 +131,8 @@ class SelfAttention(nn.Cell):
         self.num_heads = num_heads
         head_dim = dim // num_heads
 
-        self.qkv = nn.Dense(dim, dim * 3, has_bias=qkv_bias)
-        self.proj = nn.Dense(dim, dim)
+        self.qkv = nn.Linear(dim, dim * 3, has_bias=qkv_bias)
+        self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(p=proj_drop)
         self.attention = Attention(head_dim, attn_drop=attn_drop)
 
@@ -140,63 +141,43 @@ class SelfAttention(nn.Cell):
         if enable_flash_attention:
             self.flash_attention = MSFlashAttention(
                 head_dim=head_dim, head_num=num_heads, attention_dropout=attn_drop)
+
+            # self.flash_attention = nn.scaled_dot_product_attention(
+            #     head_dim, num_heads, dropout_p=attn_drop)
         else:
             self.flash_attention = None
-
-    @staticmethod
-    def _rearange_out(x: Tensor) -> Tensor:
-        # (b, h, n, d) -> (b, n, h*d)
-        b, _, n, _ = x.shape
-        x = ops.transpose(x, (0, 2, 1, 3))
-        x = ops.reshape(x, (b, n, -1))
-        return x
 
     # @staticmethod
     # def _rearange_out(x: Tensor) -> Tensor:
     #     # (b, h, n, d) -> (b, n, h*d)
     #     b, _, n, _ = x.shape
-    #     # Transpose the head and sequence length dimensions
-    #     x = x.transpose(1, 2)
-    #     x = x.reshape(b, n, -1)  # Flatten the last two dimensions
+    #     x = ops.transpose(x, (0, 2, 1, 3))
+    #     x = ops.reshape(x, (b, n, -1))
     #     return x
 
-    def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
-        h = self.num_heads
-        B, N, _ = x.shape
-
-        # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
-        qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute((2, 0, 3, 1, 4))
-        q, k, v = qkv.unbind(0)
-
-        if self.apply_rotate_embed:
-            q, k = apply_rotary_emb(q, k, freqs_cis)
-
-        # FIXME: drop the shape requiremnt when flash-attention works ok
-        if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
-            mask = ops.logical_and(mask[:, None, :], mask[:, :, None])
-            out = self.flash_attention(q, k, v, ~mask)
-        else:
-            out = self.attention(q, k, v, mask=mask)
-
+    @staticmethod
+    def _rearange_out(x: Tensor) -> Tensor:
         # (b, h, n, d) -> (b, n, h*d)
-        out = self._rearange_out(out)
-
-        return self.proj_drop(self.proj(out))
+        b, _, n, _ = x.shape
+        # Transpose the head and sequence length dimensions
+        x = x.transpose(1, 2)
+        x = x.reshape(b, n, -1)  # Flatten the last two dimensions
+        return x
 
     # def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
     #     h = self.num_heads
     #     B, N, _ = x.shape
 
     #     # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
-    #     qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute(2, 0, 3, 1, 4)
+    #     qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute((2, 0, 3, 1, 4))
     #     q, k, v = qkv.unbind(0)
 
     #     if self.apply_rotate_embed:
     #         q, k = apply_rotary_emb(q, k, freqs_cis)
 
+    #     # FIXME: drop the shape requiremnt when flash-attention works ok
     #     if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
-    #         # Using PyTorch logical and
-    #         mask = mask[:, None, :] & mask[:, :, None]
+    #         mask = ops.logical_and(mask[:, None, :], mask[:, :, None])
     #         out = self.flash_attention(q, k, v, ~mask)
     #     else:
     #         out = self.attention(q, k, v, mask=mask)
@@ -206,6 +187,29 @@ class SelfAttention(nn.Cell):
 
     #     return self.proj_drop(self.proj(out))
 
+    def construct(self, x: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None) -> Tensor:
+        h = self.num_heads
+        B, N, _ = x.shape
+
+        # (b, n, 3*h*d) -> (b, n, 3, h, d)  -> (3, b, h, n, d)
+        qkv = self.qkv(x).reshape(B, N, 3, h, -1).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)
+
+        if self.apply_rotate_embed:
+            q, k = apply_rotary_emb(q, k, freqs_cis)
+
+        if self.flash_attention and q.shape[2] % 16 == 0 and k.shape[2] % 16 == 0 and q.shape[-1] <= 256:
+            # Using PyTorch logical and
+            mask = mask[:, None, :] & mask[:, :, None]
+            out = self.flash_attention(q, k, v, ~mask)
+        else:
+            out = self.attention(q, k, v, mask=mask)
+
+        # (b, h, n, d) -> (b, n, h*d)
+        out = self._rearange_out(out)
+
+        return self.proj_drop(self.proj(out))
+
 
 class SwiGLU(nn.Cell):
     def __init__(
@@ -213,8 +217,8 @@ class SwiGLU(nn.Cell):
         in_features: int,
         hidden_features: Optional[int] = None,
         out_features: Optional[int] = None,
-        act_layer: Type[nn.Cell] = nn.SiLU,
-        norm_layer: Optional[Type[nn.Cell]] = None,
+        act_layer: Type[nn.Module] = nn.SiLU,
+        norm_layer: Optional[Type[nn.Module]] = None,
         has_bias: bool = True,
         drop: float = 0.0,
     ) -> None:
@@ -222,13 +226,13 @@ class SwiGLU(nn.Cell):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
 
-        self.fc1_g = nn.Dense(in_features, hidden_features, has_bias=has_bias)
-        self.fc1_x = nn.Dense(in_features, hidden_features, has_bias=has_bias)
+        self.fc1_g = nn.Linear(in_features, hidden_features, has_bias=has_bias)
+        self.fc1_x = nn.Linear(in_features, hidden_features, has_bias=has_bias)
         self.act = act_layer()
         self.drop1 = nn.Dropout(p=drop)
         self.norm = norm_layer(
             (hidden_features,)) if norm_layer is not None else nn.Identity()
-        self.fc2 = nn.Dense(hidden_features, out_features, has_bias=has_bias)
+        self.fc2 = nn.Linear(hidden_features, out_features, has_bias=has_bias)
         self.drop2 = nn.Dropout(p=drop)
 
     def construct(self, x: Tensor) -> Tensor:
