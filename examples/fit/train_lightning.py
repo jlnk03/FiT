@@ -13,10 +13,9 @@ from glob import glob
 import argparse
 import os
 
-from models import FiT_models
+from models.fit import FiT_models
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
-
 
 class DiTModel(LightningModule):
     def __init__(self, args):
