@@ -8,7 +8,7 @@ try:
 except ImportError:
     from typing_extensions import Literal  # FIXME: python 3.7
 
-import mindspore as ms
+# import mindspore as ms
 # from mindspore import Tensor, nn, ops
 from torch import Tensor, nn
 
