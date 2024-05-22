@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 
 import numpy as np
@@ -8,11 +7,7 @@ import torch
 from tqdm import tqdm
 from diffusers import AutoencoderKL
 
-from logger import set_logger
-
 from imagenet_dataset import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
-
-logger = logging.getLogger(__name__)
 
 config = dict()
 
@@ -24,10 +19,8 @@ def get_latent_dataset():
 if __name__ == "__main__":
     save_dir = config.get("data_folder", '../dataset')
     os.makedirs(save_dir, exist_ok=True)
-    set_logger(name="", output_dir=save_dir)
 
     # 2 vae
-    logger.info("vae init")
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True)
 
     # 3. build dataloader

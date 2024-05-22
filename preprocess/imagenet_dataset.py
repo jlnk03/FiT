@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 from typing import Dict, List, Optional, Tuple
@@ -11,8 +10,6 @@ from mindspore.dataset.transforms import Compose, vision
 from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
 
 from torch.utils.data import IterableDataset, DataLoader
-
-_logger = logging.getLogger()
 
 ALLOWED_FORMAT = {".jpeg", ".jpg", ".bmp", ".png"}
 
@@ -53,7 +50,6 @@ class ImageNetWithPathIterator:
     def _inspect_images(self, root: str) -> List[str]:
         images_info = list()
 
-        _logger.info(f"Scanning images under `{root}`.")
         for dirpath, _, filenames in os.walk(root):
             for f in filenames:
                 _, ext = os.path.splitext(f)
@@ -101,7 +97,6 @@ class ImageNetLatentIterator:
     def _inspect_latent(self, root: str) -> List[Dict[str, str]]:
         latent_info = list()
 
-        _logger.info(f"Scanning numpy file under `{root}`.")
         for dirpath, _, filenames in os.walk(root):
             for f in filenames:
                 _, ext = os.path.splitext(f)
