@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple, Type, Union
+from typing import Any, Dict, Tuple, Type, Union, Optional
 import torch
 # from torch import Tensor, nn
 from torch.nn import functional as F
@@ -11,11 +11,16 @@ except ImportError:
 # import mindspore as ms
 # from mindspore import Tensor, nn, ops
 from torch import Tensor, nn
+from torch.nn import GELU
 
-from flash_attention import MSFlashAttention
+# from flash_attention import MSFlashAttention
 
-from dit import GELU, FinalLayer, LabelEmbedder, LayerNorm, Mlp, Optional, TimestepEmbedder
-from utils import constant_, exists, modulate, normal_, xavier_uniform_
+from dit import FinalLayer, LabelEmbedder, TimestepEmbedder
+from utils import modulate
+
+from torch.nn import LayerNorm
+
+from torch.nn.init import xavier_uniform_, constant_, normal_
 
 __all__ = [
     "FiT",
@@ -33,6 +38,32 @@ __all__ = [
     "FiT_S_4",
     "FiT_S_8",
 ]
+
+
+class Mlp(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        act_layer: Type[nn.Module] = nn.GELU,
+        drop: float = 0.0,
+    ) -> None:
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_channels=in_features, out_channels=hidden_features, has_bias=True)
+        self.act = act_layer()
+        self.fc2 = nn.Linear(in_channels=hidden_features, out_channels=out_features, has_bias=True)
+        self.drop = nn.Dropout(p=drop)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
 
 
 def complex_mult(x: Tensor, y: Tensor) -> Tensor:
@@ -387,18 +418,6 @@ class FiT(nn.Module):
         constant_(self.final_layer.linear.weight, 0)
         constant_(self.final_layer.linear.bias, 0)
 
-    def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
-        """
-        x: (N, T, patch_size**2 * C)
-        imgs: (N, C, H, W)
-        """
-        c = self.out_channels
-        nh, nw = h // self.patch_size, w // self.patch_size
-        x = x.reshape((x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
-        x = ops.transpose(x, (0, 5, 1, 3, 2, 4))
-        imgs = x.reshape((x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
-        return imgs
-
     # def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
     #     """
     #     x: (N, T, patch_size**2 * C)
@@ -406,28 +425,40 @@ class FiT(nn.Module):
     #     """
     #     c = self.out_channels
     #     nh, nw = h // self.patch_size, w // self.patch_size
-    #     x = x.reshape(
-    #         (x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
-    #     x = x.permute(0, 5, 1, 3, 2, 4)  # Reorder dimensions
-    #     imgs = x.reshape(
-    #         (x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
+    #     x = x.reshape((x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
+    #     x = ops.transpose(x, (0, 5, 1, 3, 2, 4))
+    #     imgs = x.reshape((x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
     #     return imgs
 
-    def patchify(self, x: Tensor) -> Tensor:
-        N, C, H, W = x.shape
-        nh, nw = H // self.patch_size, W // self.patch_size
-        x = ops.reshape(x, (N, C, nh, self.patch_size, nw, self.patch_size))
-        x = ops.transpose(x, (0, 2, 4, 3, 5, 1))  # N, nh, nw, patch, patch, C
-        x = ops.reshape(x, (N, nh * nw, -1))
-        return x
+    def unpatchify(self, x: Tensor, h: int, w: int) -> Tensor:
+        """
+        x: (N, T, patch_size**2 * C)
+        imgs: (N, C, H, W)
+        """
+        c = self.out_channels
+        nh, nw = h // self.patch_size, w // self.patch_size
+        x = x.reshape(
+            (x.shape[0], nh, nw, self.patch_size, self.patch_size, c))
+        x = x.permute(0, 5, 1, 3, 2, 4)  # Reorder dimensions
+        imgs = x.reshape(
+            (x.shape[0], c, nh * self.patch_size, nw * self.patch_size))
+        return imgs
 
     # def patchify(self, x: Tensor) -> Tensor:
     #     N, C, H, W = x.shape
     #     nh, nw = H // self.patch_size, W // self.patch_size
-    #     x = x.reshape(N, C, nh, self.patch_size, nw, self.patch_size)
-    #     x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
-    #     x = x.reshape(N, nh * nw, -1)
+    #     x = ops.reshape(x, (N, C, nh, self.patch_size, nw, self.patch_size))
+    #     x = ops.transpose(x, (0, 2, 4, 3, 5, 1))  # N, nh, nw, patch, patch, C
+    #     x = ops.reshape(x, (N, nh * nw, -1))
     #     return x
+
+    def patchify(self, x: Tensor) -> Tensor:
+        N, C, H, W = x.shape
+        nh, nw = H // self.patch_size, W // self.patch_size
+        x = x.reshape(N, C, nh, self.patch_size, nw, self.patch_size)
+        x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
+        x = x.reshape(N, nh * nw, -1)
+        return x
 
     def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor) -> Tensor:
         """
