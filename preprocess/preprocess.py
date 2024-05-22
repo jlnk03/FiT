@@ -6,14 +6,26 @@ import torch
 
 from tqdm import tqdm
 from diffusers import AutoencoderKL
+from torch.utils.data import IterableDataset, DataLoader
 
-from imagenet_dataset import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
+from iterators import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
 
 config = dict()
 
 
-def get_latent_dataset():
-    return create_dataloader_imagenet_latent(config)
+class PreprocessedDataset(IterableDataset):
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+    def __iter__(self):
+        return iter(self.iterable)
+
+
+def get_preprocessed_dataset():
+    dataset = create_dataloader_imagenet_latent(config).create_tuple_iterator()
+    dataset = PreprocessedDataset(dataset)
+
+    return DataLoader(dataset, batch_size=config.get("batch_size", 256), shuffle=False)
 
 
 if __name__ == "__main__":

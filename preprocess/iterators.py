@@ -7,9 +7,8 @@ from PIL import Image
 
 import mindspore as ms
 from mindspore.dataset.transforms import Compose, vision
-from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
 
-from torch.utils.data import IterableDataset, DataLoader
+from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
 
 ALLOWED_FORMAT = {".jpeg", ".jpg", ".bmp", ".png"}
 
@@ -170,14 +169,6 @@ def create_dataloader_imagenet_preprocessing(
     return dataset
 
 
-class Container(IterableDataset):
-    def __init__(self, iterable):
-        self.iterable = iterable
-
-    def __iter__(self):
-        return iter(self.iterable)
-
-
 def create_dataloader_imagenet_latent(
     config,
 ):
@@ -205,9 +196,4 @@ def create_dataloader_imagenet_latent(
 
     dataset = dataset.padded_batch(config.get("batch_size", 256), drop_remainder=True, pad_info=pad_info)
 
-    dataset = dataset.create_tuple_iterator()
-    dataset = Container(dataset)
-
-    dataloader = DataLoader(dataset, batch_size=config.get("batch_size", 256), shuffle=False)
-
-    return dataloader
+    return dataset
