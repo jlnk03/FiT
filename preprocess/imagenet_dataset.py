@@ -8,8 +8,9 @@ from PIL import Image
 
 import mindspore as ms
 from mindspore.dataset.transforms import Compose, vision
-
 from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
+
+from torch.utils.data import IterableDataset, DataLoader
 
 _logger = logging.getLogger()
 
@@ -44,7 +45,7 @@ class _ResizeByMaxValue:
 
 class ImageNetWithPathIterator:
     def __init__(self, config) -> None:
-        self.image_paths = self._inspect_images(config["data_folder"])
+        self.image_paths = self._inspect_images(config.get("data_folder", '../dataset'))
         self.transform = self._create_transform(
             max_size=config.get("sample_size", 256), patch_size=config.get("patch_size", 2)
         )
@@ -91,10 +92,10 @@ class ImageNetWithPathIterator:
 
 class ImageNetLatentIterator:
     def __init__(self, config) -> None:
-        self.latent_info = self._inspect_latent(config["data_folder"])
+        self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent'))
         self.label_mapping = self._create_label_mapping(self.latent_info)
         self.patch_size = config.get("patch_size", 2)
-        self.embed_dim = config.get("embed_dim", 1152)
+        self.embed_dim = config.get("embed_dim", 16)
         self.embed_method = config.get("embed_method", "rotate")
 
     def _inspect_latent(self, root: str) -> List[Dict[str, str]]:
@@ -168,27 +169,36 @@ def create_dataloader_imagenet_preprocessing(
     dataset = ms.dataset.GeneratorDataset(
         dataset,
         column_names=["image", "path"],
-        shuffle=config["shuffle"],
+        shuffle=config.get("shuffle", True),
     )
     dataset = dataset.batch(1)
     return dataset
+
+
+class Container(IterableDataset):
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+    def __iter__(self):
+        return iter(self.iterable)
 
 
 def create_dataloader_imagenet_latent(
     config,
 ):
     dataset = ImageNetLatentIterator(config)
+    print(type(dataset))
     dataset = ms.dataset.GeneratorDataset(
         dataset,
         column_names=["latent", "label", "pos", "mask"],
-        shuffle=config["shuffle"],
+        shuffle=config.get("shuffle", True),
     )
 
     sample_size = config.get("sample_size", 256)
     patch_size = config.get("patch_size", 2)
     vae_scale = 8
     max_length = sample_size * sample_size // patch_size // patch_size // vae_scale // vae_scale
-    embed_dim = config.get("embed_dim", 72)
+    embed_dim = config.get("embed_dim", 16)
     C = 4
 
     pad_info = {
@@ -198,5 +208,11 @@ def create_dataloader_imagenet_latent(
         "mask": ([max_length], 0),
     }
 
-    dataset = dataset.padded_batch(config["batch_size"], drop_remainder=True, pad_info=pad_info)
-    return dataset
+    dataset = dataset.padded_batch(config.get("batch_size", 256), drop_remainder=True, pad_info=pad_info)
+
+    dataset = dataset.create_tuple_iterator()
+    dataset = Container(dataset)
+
+    dataloader = DataLoader(dataset, batch_size=config.get("batch_size", 256), shuffle=False)
+
+    return dataloader

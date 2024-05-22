@@ -1,8 +1,5 @@
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader, Dataset
-from torchvision import datasets
-from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import AutoencoderKL, UniPCMultistepScheduler
@@ -10,12 +7,8 @@ import numpy as np
 from typing import Any, Dict, Optional, Tuple
 from torch import Tensor
 
-from fit import FiT_models, apply_rotary_emb
-
 from PIL import Image
 from fit import FiT_models
-import torchvision.transforms as transforms
-from datasets import load_dataset
 
 
 def _precompute_freqs_cis_1d_from_grid(
@@ -115,24 +108,19 @@ class FiTFusion(pl.LightningModule):
 
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
+
         self.tokenizer = CLIPTokenizer.from_pretrained(
             "CompVis/stable-diffusion-v1-4", subfolder="tokenizer")
         self.text_encoder = CLIPTextModel.from_pretrained(
             "CompVis/stable-diffusion-v1-4", subfolder="text_encoder", use_safetensors=True
         )
-        self.vae = AutoencoderKL.from_pretrained(
-            "CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True)
+
         self.scheduler = UniPCMultistepScheduler.from_pretrained(
             "CompVis/stable-diffusion-v1-4", subfolder="scheduler")
+
         self.FiT = FiT_models['FiT-B/2']()
         self.generator = torch.Generator(device=self.device).manual_seed(42)
 
-        self.dataset = load_dataset("imagenet-1k")
-        self.transform = transforms.Compose([transforms.Lambda(lambda img: img.resize((256, img.height)) if img.width > 256 else img),
-                                             transforms.Lambda(lambda img: img.resize((img.width, 256)) if img.height > 256 else img),
-                                             transforms.RandomHorizontalFlip(),
-                                             transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5], inplace=True)])
         self.loss = torch.nn.MSELoss()
         self.inference_steps = 25
 
@@ -194,35 +182,29 @@ class FiTFusion(pl.LightningModule):
         return loss
 
     def forward_with_loss(self, batch, guidance_scale=7.5):
-        sample_images, prompts = batch
+        images_encoded, pos, mask, prompts = batch
 
         # NOT USED ATM
         prompts_encoded = self.encode_text(prompts)
 
-        sample_images_encoded = self.vae.encode(sample_images)
-
-        B, C, H, W = sample_images_encoded.shape
+        B, C, H, W = images_encoded.shape
 
         timesteps = torch.from_numpy(np.random.choice(self.inference_steps, size=(B,))).to(self.device)
 
-        noise = torch.randn(sample_images_encoded.shape)
+        noise = torch.randn(images_encoded.shape)
 
-        noisy_images = self.noise_scheduler.add_noise(sample_images_encoded, noise, timesteps)
+        noisy_images_encoded = self.noise_scheduler.add_noise(images_encoded, noise, timesteps)
 
-        noisy_images = torch.cat([noisy_images] * 2)
+        noisy_images_encoded = torch.cat([noisy_images_encoded] * 2)
 
-        rope = _create_pos_embed(H // 8, W // 8, 2, 256 ** 2 / 4, 256)
-
-        mask = _create_mask(H * W / 4, 256**2/4, B)
-
-        noise_pred = self.unpatchify(self.FiT.construct(self.FiT.patchify(noisy_images), timesteps, rope, mask))
+        noise_pred = self.FiT.construct(noisy_images_encoded, timesteps, prompts_encoded, pos, mask)
 
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-        sample_images_predicted = self.scheduler.step(noise_pred, timesteps, noisy_images).prev_sample
+        predicted_images_encoded = self.scheduler.step(noise_pred, timesteps, noisy_images_encoded).prev_sample
 
-        return self.loss(sample_images_encoded, sample_images_predicted)
+        return self.loss(predicted_images_encoded, images_encoded)
 
     def encode_text(self, prompts):
         text_input = self.tokenizer(
@@ -242,22 +224,7 @@ class FiTFusion(pl.LightningModule):
         )
         uncond_embeddings = self.text_encoder(uncond_input)
 
-        return torch.cat([uncond_embeddings.repeat(len(prompts), 1), text_embeddings], dim=1)
+        return torch.cat([uncond_embeddings.repeat(len(prompts), 1), text_embeddings], dim=0)
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
-
-    def train_dataloader(self):
-        dataset = self.dataset['train']
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
-        return dataloader
-
-    def val_dataloader(self):
-        dataset = self.dataset['validation']
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
-        return dataloader
-
-    def test_dataloader(self):
-        dataset = self.dataset['test']
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, transforms=self.transform)
-        return dataloader

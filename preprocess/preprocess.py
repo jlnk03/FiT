@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-"""
-FiT preprocessing (for training) pipeline
-"""
-import argparse
 import json
 import logging
 import os
@@ -15,28 +10,19 @@ from diffusers import AutoencoderKL
 
 from logger import set_logger
 
-from imagenet_dataset import create_dataloader_imagenet_preprocessing
+from imagenet_dataset import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
 
 logger = logging.getLogger(__name__)
 
+config = dict()
 
-def parse_args():
-    parser = argparse.ArgumentParser()
 
-    parser.add_argument("--image_size", type=int, default=256, help="path to source torch checkpoint, which ends with .pt")
-    parser.add_argument("--outdir", default="../latent", help="Path of the output dir")
-    parser.add_argument("--patch_size", type=int, default=2, help="Patch size")
-    parser.add_argument("--data_path", default="../dataset", type=str, help="data path")
-
-    args = parser.parse_args()
-
-    return args
+def get_latent_dataset():
+    return create_dataloader_imagenet_latent(config)
 
 
 if __name__ == "__main__":
-    args = parse_args()
-
-    save_dir = args.outdir
+    save_dir = config.get("data_folder", '../dataset')
     os.makedirs(save_dir, exist_ok=True)
     set_logger(name="", output_dir=save_dir)
 
@@ -45,7 +31,7 @@ if __name__ == "__main__":
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True)
 
     # 3. build dataloader
-    dataloader = create_dataloader_imagenet_preprocessing(dict(data_folder=args.data_path, sample_size=args.image_size, patch_size=args.patch_size))
+    dataloader = create_dataloader_imagenet_preprocessing(config)
 
     # 4. run inference
     records = list()
