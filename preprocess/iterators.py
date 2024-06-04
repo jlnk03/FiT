@@ -1,14 +1,12 @@
 import os
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
-
+import torchvision
 from PIL import Image
-
-import mindspore as ms
-from mindspore.dataset.transforms import Compose, vision
+from torch.utils.data import Dataset
 
 from pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
 
@@ -41,12 +39,14 @@ class _ResizeByMaxValue:
         return img
 
 
-class ImageNetWithPathIterator:
+class ImageNetWithPathIterator(Dataset):
     def __init__(self, config) -> None:
         self.image_paths = self._inspect_images(config.get("data_folder", '../dataset'))
-        self.transform = self._create_transform(
-            max_size=config.get("sample_size", 256), patch_size=config.get("patch_size", 2)
-        )
+        self.resize = _ResizeByMaxValue(max_size=config.get("sample_size", 256),
+                                        patch_size=config.get("patch_size", 2))
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(),
+                                                         torchvision.transforms.Normalize([127.5, 127.5, 127.5],
+                                                                                          [127.5, 127.5, 127.5])])
 
     def _inspect_images(self, root: str) -> List[str]:
         images_info = list()
@@ -64,16 +64,6 @@ class ImageNetWithPathIterator:
         images_info = sorted(images_info)
         return images_info
 
-    def _create_transform(self, max_size: int = 256, patch_size: int = 2):
-        operations = torch.Compose(
-            [
-                _ResizeByMaxValue(max_size=max_size, patch_size=patch_size),
-                vision.HWC2CHW(),
-                vision.Normalize([127.5, 127.5, 127.5], [127.5, 127.5, 127.5], is_hwc=False),
-            ]
-        )
-        return operations
-
     def __len__(self):
         return len(self.image_paths)
 
@@ -83,15 +73,23 @@ class ImageNetWithPathIterator:
         with Image.open(path) as f:
             img = f.convert("RGB")
 
-        img = self.transform(img)[0]
+        img = self.resize(img)
+        img = self.transform(img)
+
         return img, path
 
 
-class ImageNetLatentIterator:
+class ImageNetLatentIterator(Dataset):
     def __init__(self, config) -> None:
         self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent'))
         self.label_mapping = self._create_label_mapping(self.latent_info)
+
+        self.sample_size = config.get("sample_size", 256)
         self.patch_size = config.get("patch_size", 2)
+        self.vae_scale = config.get("vae_scale", 8)
+        self.C = config.get("C", 4)
+        self.max_length = self.sample_size * self.sample_size // self.patch_size // self.patch_size // self.vae_scale // self.vae_scale
+
         self.embed_dim = config.get("embed_dim", 16)
         self.embed_method = config.get("embed_method", "rotate")
 
@@ -155,46 +153,36 @@ class ImageNetLatentIterator:
 
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
+
+        latent = torch.tensor(latent)
+        latent = torch.nn.functional.pad(latent, (
+            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.max_length - latent.shape[0]))
+
+        pos = torch.tensor(pos)
+        pos = torch.nn.functional.pad(pos, (
+            0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
+
+        mask = torch.tensor(mask)
+        mask = torch.nn.functional.pad(mask, (0, self.max_length - pos.shape[0]))
+
+        label = torch.tensor(label)
+
         return latent, label, pos, mask
 
 
 def create_dataloader_imagenet_preprocessing(
-    config,
+        config,
 ):
     dataset = ImageNetWithPathIterator(config)
-    dataset = ms.dataset.GeneratorDataset(
-        dataset,
-        column_names=["image", "path"],
-        shuffle=config.get("shuffle", True),
-    )
-    dataset = dataset.batch(1)
-    return dataset
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=1)
+
+    return dataloader
 
 
 def create_dataloader_imagenet_latent(
-    config,
+        config,
 ):
     dataset = ImageNetLatentIterator(config)
-    dataset = ms.dataset.GeneratorDataset(
-        dataset,
-        column_names=["latent", "label", "pos", "mask"],
-        shuffle=config.get("shuffle", True),
-    )
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=config.get("batch_size", 256))
 
-    sample_size = config.get("sample_size", 256)
-    patch_size = config.get("patch_size", 2)
-    vae_scale = 8
-    max_length = sample_size * sample_size // patch_size // patch_size // vae_scale // vae_scale
-    embed_dim = config.get("embed_dim", 16)
-    C = 4
-
-    pad_info = {
-        "latent": ([max_length, patch_size * patch_size * C], 0),
-        "label": None,
-        "pos": ([max_length, embed_dim], 0),
-        "mask": ([max_length], 0),
-    }
-
-    dataset = dataset.padded_batch(config.get("batch_size", 256), drop_remainder=True, pad_info=pad_info)
-
-    return dataset
+    return dataloader

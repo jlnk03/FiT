@@ -49,7 +49,7 @@ def get_1d_sincos_pos_embed(embed_dim: int, length: int) -> np.ndarray:
 
 
 def precompute_freqs_cis_2d(
-    dim: int, nh: int, nw: Optional[int] = None, theta: float = 10000.0, max_length: Optional[int] = None
+        dim: int, nh: int, nw: Optional[int] = None, theta: float = 10000.0, max_length: Optional[int] = None
 ) -> np.ndarray:
     """Precompute the frequency tensor for complex exponentials (cis) with given dimensions, for 2D RoPE
     referered from 1D RoPE https://github.com/meta-llama/llama and paper `FiT` https://arxiv.org/abs/2402.12376
@@ -95,7 +95,7 @@ def _get_1d_sincos_pos_embed_from_grid(embed_dim: int, pos: np.ndarray) -> np.nd
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=np.float64)
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000**omega  # (D/2,)
+    omega = 1.0 / 10000 ** omega  # (D/2,)
     out = np.outer(pos, omega)  # (M, D/2), outer product
 
     emb_sin = np.sin(out)  # (M, D/2)
@@ -106,7 +106,7 @@ def _get_1d_sincos_pos_embed_from_grid(embed_dim: int, pos: np.ndarray) -> np.nd
 
 
 def _precompute_freqs_cis_2d_from_grid(
-    dim: int, grid: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
+        dim: int, grid: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
 ) -> np.ndarray:
     freqs_cis_w = _precompute_freqs_cis_1d_from_grid(dim // 2, grid[0], theta=theta, max_length=max_length)
     freqs_cis_h = _precompute_freqs_cis_1d_from_grid(dim // 2, grid[1], theta=theta, max_length=max_length)
@@ -115,7 +115,7 @@ def _precompute_freqs_cis_2d_from_grid(
 
 
 def _precompute_freqs_cis_1d_from_grid(
-    dim: int, pos: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
+        dim: int, pos: np.ndarray, theta: float = 10000.0, max_length: Optional[int] = None
 ) -> np.ndarray:
     if max_length is not None:
         # VisionNTK
@@ -133,7 +133,8 @@ def _precompute_freqs_cis_1d_from_grid(
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq)
-    sinusoid_inp = torch.cat((torch.Tensor(sinusoid_inp, dtype=torch.float32), torch.Tensor(sinusoid_inp, dtype=torch.float32)), dim=-1)
+    sinusoid_inp = torch.cat(
+        (torch.Tensor(sinusoid_inp, dtype=torch.float32), torch.Tensor(sinusoid_inp, dtype=torch.float32)), dim=-1)
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 

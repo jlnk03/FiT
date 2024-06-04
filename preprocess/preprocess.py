@@ -4,28 +4,11 @@ import os
 import numpy as np
 import torch
 
-from tqdm import tqdm
 from diffusers import AutoencoderKL
-from torch.utils.data import IterableDataset, DataLoader
-
-from iterators import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
+from tqdm import tqdm
+from iterators import create_dataloader_imagenet_preprocessing
 
 config = dict()
-
-
-class PreprocessedDataset(IterableDataset):
-    def __init__(self, iterable):
-        self.iterable = iterable
-
-    def __iter__(self):
-        return iter(self.iterable)
-
-
-def get_preprocessed_dataset():
-    dataset = create_dataloader_imagenet_latent(config).create_tuple_iterator()
-    dataset = PreprocessedDataset(dataset)
-
-    return DataLoader(dataset, batch_size=config.get("batch_size", 256), shuffle=False)
 
 
 if __name__ == "__main__":
@@ -40,20 +23,22 @@ if __name__ == "__main__":
 
     # 4. run inference
     records = list()
-    for img, path in tqdm(dataloader.create_tuple_iterator(num_epochs=1), total=len(dataloader)):
-        path = path.asnumpy().item()
+    for img, path in tqdm(dataloader):
+        path = path[0]
+
         outdir = os.path.abspath(os.path.join(save_dir, os.path.basename(os.path.dirname(path))))
 
         if not os.path.isdir(outdir):
             os.makedirs(outdir)
 
         dest = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".npy")
+        print(dest)
 
         if os.path.isfile(dest):
             continue
 
         with torch.no_grad():
-            enc = vae.encode(torch.from_numpy(img.asnumpy())).latent_dist.sample() * 0.18215
+            enc = vae.encode(img).latent_dist.sample() * 0.18215
 
         latent = enc.detach().numpy().astype(np.float16)[0]
 
