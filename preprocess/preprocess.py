@@ -34,11 +34,13 @@ config = dict()
     
 
 if __name__ == "__main__":
+    device = ("cuda" if torch.cuda.is_available() else "cpu")
+
     save_dir = config.get("latent_folder", '../latent_two')
     os.makedirs(save_dir, exist_ok=True)
 
     # 2 vae
-    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True)
+    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True).to(device)
 
     # 3. build dataloader
     dataloader = create_dataloader_imagenet_preprocessing(config)
@@ -59,7 +61,7 @@ if __name__ == "__main__":
             continue
 
         with torch.no_grad():
-            enc = vae.encode(img).latent_dist.sample() * 0.18215
+            enc = vae.encode(img.to(device)).latent_dist.sample() * 0.18215
 
         latent = enc.detach().numpy().astype(np.float16)[0]
 
