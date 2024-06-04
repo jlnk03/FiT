@@ -3,13 +3,12 @@ import os
 
 import numpy as np
 import torch
-
 from diffusers import AutoencoderKL
 from tqdm import tqdm
+
 from iterators import create_dataloader_imagenet_preprocessing
 
 config = dict()
-
 
 if __name__ == "__main__":
     save_dir = config.get("data_folder", '../dataset')
