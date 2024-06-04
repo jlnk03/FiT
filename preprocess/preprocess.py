@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 config = dict()
 
-def decode_latents(latents):
+'''def decode_latents(latents):
     #print(type(latents))
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True, num_groups=12)
     latents = np.load(latents)
@@ -30,7 +30,7 @@ def decode_latents(latents):
     torch.save(image, save_path)
 
     plt.imshow(image[0].permute(1, 2, 0).cpu().numpy())
-    plt.show()
+    plt.show()'''
     
 
 if __name__ == "__main__":
@@ -61,7 +61,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             enc = vae.encode(img).latent_dist.sample() * 0.18215
 
-        latent = enc.detach().numpy().astype(np.float32)[0]
+        latent = enc.detach().numpy().astype(np.float16)[0]
 
         np.save(dest, latent)
         records.append(dict(img=path, latent=dest))

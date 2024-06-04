@@ -44,9 +44,7 @@ class ImageNetWithPathIterator(Dataset):
         self.image_paths = self._inspect_images(config.get("img_folder", '../dataset'))
         self.resize = _ResizeByMaxValue(max_size=config.get("sample_size", 256),
                                         patch_size=config.get("patch_size", 2))
-        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(),
-                                                         torchvision.transforms.Normalize([127.5, 127.5, 127.5],
-                                                                                          [127.5, 127.5, 127.5])])
+        self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
 
     def _inspect_images(self, root: str) -> List[str]:
         images_info = list()
