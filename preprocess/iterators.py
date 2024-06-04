@@ -41,7 +41,7 @@ class _ResizeByMaxValue:
 
 class ImageNetWithPathIterator(Dataset):
     def __init__(self, config) -> None:
-        self.image_paths = self._inspect_images(config.get("data_folder", '../dataset'))
+        self.image_paths = self._inspect_images(config.get("img_folder", '../dataset'))
         self.resize = _ResizeByMaxValue(max_size=config.get("sample_size", 256),
                                         patch_size=config.get("patch_size", 2))
         self.transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(),
@@ -81,7 +81,7 @@ class ImageNetWithPathIterator(Dataset):
 
 class ImageNetLatentIterator(Dataset):
     def __init__(self, config) -> None:
-        self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent'))
+        self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent_two'))
         self.label_mapping = self._create_label_mapping(self.latent_info)
 
         self.sample_size = config.get("sample_size", 256)

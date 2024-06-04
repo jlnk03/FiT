@@ -34,7 +34,7 @@ def decode_latents(latents):
     
 
 if __name__ == "__main__":
-    save_dir = config.get("data_folder", '../dataset')
+    save_dir = config.get("latent_folder", '../latent_two')
     os.makedirs(save_dir, exist_ok=True)
 
     # 2 vae
@@ -54,7 +54,6 @@ if __name__ == "__main__":
             os.makedirs(outdir)
 
         dest = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".npy")
-        print(dest)
 
         if os.path.isfile(dest):
             continue
@@ -62,7 +61,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             enc = vae.encode(img).latent_dist.sample() * 0.18215
 
-        latent = enc.detach().numpy().astype(np.float16)[0]
+        latent = enc.detach().numpy()[0]
 
         np.save(dest, latent)
         records.append(dict(img=path, latent=dest))
