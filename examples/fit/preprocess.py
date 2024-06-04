@@ -134,3 +134,4 @@ if __name__ == "__main__":
     out_json = os.path.join(save_dir, "path.json")
     with open(out_json, "w") as f:
         json.dump(records, f, indent=4)
+

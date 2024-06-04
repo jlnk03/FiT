@@ -8,7 +8,30 @@ from tqdm import tqdm
 
 from iterators import create_dataloader_imagenet_preprocessing
 
+import matplotlib.pyplot as plt
+
 config = dict()
+
+def decode_latents(latents):
+    #print(type(latents))
+    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True, num_groups=12)
+    latents = np.load(latents)
+    latents = torch.from_numpy(latents).to(torch.float32)
+    print(latents.shape)
+    latents = 1.0 / 0.18215 * latents
+    latents = latents[None, :, :, :]
+    print(type(latents))
+    with torch.no_grad():
+        image = vae.decode(latents).sample
+    save_path = os.path.join('decoded/', f"decoded_image{np.random.randint(1000)}.npy")
+    print(image.shape)
+    #os.makedirs(save_path, exist_ok=True)
+    #image.save(save_path)
+    torch.save(image, save_path)
+
+    plt.imshow(image[0].permute(1, 2, 0).cpu().numpy())
+    plt.show()
+    
 
 if __name__ == "__main__":
     save_dir = config.get("data_folder", '../dataset')
