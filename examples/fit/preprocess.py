@@ -39,6 +39,16 @@ def init_env(args):
 
     return device_id
 
+def decode_latents(latents):
+    latents = 1 / 0.18215 * latents
+    with torch.no_grad():
+        image = vae.decode(latents).sample
+    save_path = os.path.join(args.outdir, "decoded")
+    os.makedirs(save_path, exist_ok=True)
+    filename = os.path.join(save_path, "decoded_image.png")
+    image.save(filename)
+    os.system(f"open {filename}")
+    return image
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -134,3 +144,4 @@ if __name__ == "__main__":
     out_json = os.path.join(save_dir, "path.json")
     with open(out_json, "w") as f:
         json.dump(records, f, indent=4)
+
