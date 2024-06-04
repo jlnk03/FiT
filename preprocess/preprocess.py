@@ -52,7 +52,9 @@ if __name__ == "__main__":
         if os.path.isfile(dest):
             continue
 
-        enc = vae.encode(torch.from_numpy(img.asnumpy())).latent_dist.sample() * 0.18215
+        with torch.no_grad():
+            enc = vae.encode(torch.from_numpy(img.asnumpy())).latent_dist.sample() * 0.18215
+
         latent = enc.detach().numpy().astype(np.float16)[0]
 
         np.save(dest, latent)

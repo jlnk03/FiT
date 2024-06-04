@@ -3,6 +3,8 @@ import random
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import torch
+
 from PIL import Image
 
 import mindspore as ms
@@ -63,7 +65,7 @@ class ImageNetWithPathIterator:
         return images_info
 
     def _create_transform(self, max_size: int = 256, patch_size: int = 2):
-        operations = Compose(
+        operations = torch.Compose(
             [
                 _ResizeByMaxValue(max_size=max_size, patch_size=patch_size),
                 vision.HWC2CHW(),
@@ -173,7 +175,6 @@ def create_dataloader_imagenet_latent(
     config,
 ):
     dataset = ImageNetLatentIterator(config)
-    print(type(dataset))
     dataset = ms.dataset.GeneratorDataset(
         dataset,
         column_names=["latent", "label", "pos", "mask"],
