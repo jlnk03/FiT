@@ -27,6 +27,17 @@ def get_preprocessed_dataset():
 
     return DataLoader(dataset, batch_size=config.get("batch_size", 256), shuffle=False)
 
+def decode_latents(latents):
+    latents = 1 / 0.18215 * latents
+    with torch.no_grad():
+        image = vae.decode(latents).sample
+    save_path = os.path.join(args.outdir, "decoded")
+    os.makedirs(save_path, exist_ok=True)
+    filename = os.path.join(save_path, "decoded_image.png")
+    image.save(filename)
+    os.system(f"open {filename}")
+    return image
+
 
 if __name__ == "__main__":
     save_dir = config.get("data_folder", '../dataset')
