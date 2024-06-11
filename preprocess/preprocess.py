@@ -63,7 +63,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             enc = vae.encode(img.to(device)).latent_dist.sample() * 0.18215
 
-        latent = enc.detach().numpy().astype(np.float16)[0]
+        latent = enc.detach().cpu().numpy().astype(np.float16)[0]
 
         np.save(dest, latent)
         records.append(dict(img=path, latent=dest))
