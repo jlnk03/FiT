@@ -203,7 +203,7 @@ def main(args):
     for epoch in range(args.epochs):
         if accelerator.is_main_process:
             logger.info(f"Beginning epoch {epoch}...")
-        for latent, label, pos, mask in loader:
+        for latent, unpatchified_latent, label, pos, mask in loader:
             x = latent.to(device)
             y = label.to(device)
             x = x.squeeze(dim=1)

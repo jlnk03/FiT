@@ -15,12 +15,15 @@ from torch.nn import GELU
 
 # from flash_attention import MSFlashAttention
 
-from dit import FinalLayer, LabelEmbedder, TimestepEmbedder
-from utils import modulate
+from dit import FinalLayer
+# from utils import modulate
 
 from torch.nn import LayerNorm
 
 from torch.nn.init import xavier_uniform_, constant_, normal_
+
+import math
+
 
 __all__ = [
     "FiT",
@@ -39,6 +42,78 @@ __all__ = [
     "FiT_S_8",
 ]
 
+def modulate(x, shift, scale):
+    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+class TimestepEmbedder(nn.Module):
+    """
+    Embeds scalar timesteps into vector representations.
+    """
+    def __init__(self, hidden_size, frequency_embedding_size=256):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+        self.frequency_embedding_size = frequency_embedding_size
+
+    @staticmethod
+    def timestep_embedding(t, dim, max_period=10000):
+        """
+        Create sinusoidal timestep embeddings.
+        :param t: a 1-D Tensor of N indices, one per batch element.
+                          These may be fractional.
+        :param dim: the dimension of the output.
+        :param max_period: controls the minimum frequency of the embeddings.
+        :return: an (N, D) Tensor of positional embeddings.
+        """
+        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+        ).to(device=t.device)
+        args = t[:, None].float() * freqs[None]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding
+
+    def forward(self, t):
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        t_emb = self.mlp(t_freq)
+        return t_emb
+
+
+class LabelEmbedder(nn.Module):
+    """
+    Embeds class labels into vector representations. Also handles label dropout for classifier-free guidance.
+    """
+    def __init__(self, num_classes, hidden_size, dropout_prob):
+        super().__init__()
+        use_cfg_embedding = dropout_prob > 0
+        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
+        self.num_classes = num_classes
+        self.dropout_prob = dropout_prob
+
+    def token_drop(self, labels, force_drop_ids=None):
+        """
+        Drops labels to enable classifier-free guidance.
+        """
+        if force_drop_ids is None:
+            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+        else:
+            drop_ids = force_drop_ids == 1
+        labels = torch.where(drop_ids, self.num_classes, labels)
+        return labels
+
+    def forward(self, labels, train, force_drop_ids=None):
+        use_dropout = self.dropout_prob > 0
+        if (train and use_dropout) or (force_drop_ids is not None):
+            labels = self.token_drop(labels, force_drop_ids)
+        embeddings = self.embedding_table(labels)
+        return embeddings
+
 
 class Mlp(nn.Module):
     def __init__(
@@ -52,9 +127,9 @@ class Mlp(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_channels=in_features, out_channels=hidden_features, has_bias=True)
+        self.fc1 = nn.Linear(in_channels=in_features, out_channels=hidden_features)
         self.act = act_layer()
-        self.fc2 = nn.Linear(in_channels=hidden_features, out_channels=out_features, has_bias=True)
+        self.fc2 = nn.Linear(in_channels=hidden_features, out_channels=out_features)
         self.drop = nn.Dropout(p=drop)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -162,7 +237,7 @@ class SelfAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
 
-        self.qkv = nn.Linear(dim, dim * 3, has_bias=qkv_bias)
+        self.qkv = nn.Linear(dim, dim * 3)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(p=proj_drop)
         self.attention = Attention(head_dim, attn_drop=attn_drop)
@@ -249,20 +324,20 @@ class SwiGLU(nn.Module):
         out_features: Optional[int] = None,
         act_layer: Type[nn.Module] = nn.SiLU,
         norm_layer: Optional[Type[nn.Module]] = None,
-        has_bias: bool = True,
+        # has_bias: bool = True,
         drop: float = 0.0,
     ) -> None:
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
 
-        self.fc1_g = nn.Linear(in_features, hidden_features, has_bias=has_bias)
-        self.fc1_x = nn.Linear(in_features, hidden_features, has_bias=has_bias)
+        self.fc1_g = nn.Linear(in_features, hidden_features)
+        self.fc1_x = nn.Linear(in_features, hidden_features)
         self.act = act_layer()
         self.drop1 = nn.Dropout(p=drop)
         self.norm = norm_layer(
             (hidden_features,)) if norm_layer is not None else nn.Identity()
-        self.fc2 = nn.Linear(hidden_features, out_features, has_bias=has_bias)
+        self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop2 = nn.Dropout(p=drop)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -302,7 +377,7 @@ class FiTBlock(nn.Module):
             mlp_hidden_dim = int(hidden_size * mlp_ratio *
                                  2 / 3)  # following LLaMA
             self.ffn = SwiGLU(
-                in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, has_bias=False, drop=0
+                in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=nn.SiLU, drop=0
             )
         elif ffn == "mlp":
             mlp_hidden_dim = int(hidden_size * mlp_ratio)
@@ -311,8 +386,8 @@ class FiTBlock(nn.Module):
                            hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
         else:
             raise ValueError(f"Unsupported ffn `{ffn}`")
-        self.adaLN_modulation = nn.SequentialCell(
-            nn.SiLU(), nn.Dense(hidden_size, 6 * hidden_size, has_bias=True))
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(), nn.Linear(hidden_size, 6 * hidden_size))
 
     def forward(
         self, x: Tensor, c: Tensor, mask: Optional[Tensor] = None, freqs_cis: Optional[Tensor] = None
@@ -373,14 +448,14 @@ class FiT(nn.Module):
         assert pos in ["absolute", "rotate"]
         assert ffn in ["swiglu", "mlp"]
 
-        self.x_embedder = nn.Dense(
-            self.in_channels * patch_size * patch_size, hidden_size, has_bias=True)
+        self.x_embedder = nn.Linear(
+            self.in_channels * patch_size * patch_size, hidden_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.y_embedder = LabelEmbedder(
             num_classes, hidden_size, class_dropout_prob)
 
-        self.blocks = nn.CellList(
-            [
+        self.blocks = nn.Sequential(
+            *[
                 FiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio,
                          ffn=ffn, pos=pos, **block_kwargs)
                 for _ in range(depth)
@@ -393,7 +468,7 @@ class FiT(nn.Module):
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
-            if isinstance(module, nn.Dense):
+            if isinstance(module, nn.Linear):
                 xavier_uniform_(module.weight)
                 if module.bias is not None:
                     constant_(module.bias, 0)
@@ -401,7 +476,7 @@ class FiT(nn.Module):
         self.apply(_basic_init)
 
         # Initialize label embedding table:
-        normal_(self.y_embedder.embedding_table.embedding_table, std=0.02)
+        normal_(self.y_embedder.embedding_table.weight, std=0.02)
 
         # Initialize timestep embedding MLP:
         normal_(self.t_embedder.mlp[0].weight, std=0.02)
