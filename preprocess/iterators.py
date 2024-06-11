@@ -140,15 +140,15 @@ class ImageNetLatentIterator(Dataset):
     def __getitem__(self, idx):
         x = self.latent_info[idx]
 
-        latent = np.load(x["path"])
+        latent_unpatchified = np.load(x["path"])
 
         # N(mean, std)
-        mean, std = np.split(latent, 2, axis=0)
-        latent = mean + std * np.random.randn(*mean.shape).astype(mean.dtype)
+        mean, std = np.split(latent_unpatchified, 2, axis=0)
 
-        latent = self._random_horiztotal_flip(latent)
-        latent, pos = self._patchify(latent)
+        latent_unpatchified = mean + std * np.random.randn(*mean.shape).astype(mean.dtype)
+        latent_unpatchified = self._random_horiztotal_flip(latent_unpatchified)
 
+        latent, pos = self._patchify(latent_unpatchified)
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
 
@@ -165,7 +165,7 @@ class ImageNetLatentIterator(Dataset):
 
         label = torch.tensor(label)
 
-        return latent, label, pos, mask
+        return latent, latent_unpatchified, label, pos, mask
 
 
 def create_dataloader_imagenet_preprocessing(
