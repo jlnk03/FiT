@@ -203,16 +203,18 @@ def main(args):
     for epoch in range(args.epochs):
         if accelerator.is_main_process:
             logger.info(f"Beginning epoch {epoch}...")
-        for latent, unpatchified_latent, label, pos, mask in loader:
+        for latent, label, pos, mask, h, w in loader:
             x = latent.to(device)
             y = label.to(device)
-            x = x.squeeze(dim=1)
-            y = y.squeeze(dim=1)
+            # x = x.squeeze(dim=1)
+            # y = y.squeeze(dim=1)
             pos = pos.to(device)
             mask = mask.to(device)
+            h = h.to(device)
+            w = w.to(device)
             t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device)
             # TODO: Key difference to DiT; make sure correct values are passed to the model_kwargs
-            model_kwargs = dict(y=y, pos=pos, mask=mask)
+            model_kwargs = dict(y=y, pos=pos, mask=mask, h=h, w=w)
             loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
             loss = loss_dict["loss"].mean()
             opt.zero_grad()

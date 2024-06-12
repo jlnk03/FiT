@@ -535,7 +535,7 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int) -> Tensor:
         """
         Forward pass of FiT.
         x: (N, C, H, W) tensor of latent token
@@ -543,9 +543,11 @@ class FiT(nn.Module):
         y: (N,) tensor of class labels
         pos: (N, T, D) tensor of positional embedding or precomputed cosine and sine frequencies
         mask: (N, T) tensor of valid mask
+        h: height of the input image latent
+        w: width of the input image latent
         """
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
-        _, _, h, w = x.shape
+        # _, _, h, w = x.shape
         # x = self.patchify(x)
         if self.pos == "absolute":
             # (N, T, D), where T = H * W / patch_size ** 2

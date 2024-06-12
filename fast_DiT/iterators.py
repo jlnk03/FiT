@@ -142,6 +142,8 @@ class ImageNetLatentIterator(Dataset):
 
         latent = np.load(x["path"])
 
+        h, w = latent.shape[1:]
+
         # N(mean, std)
         mean, std = np.split(latent, 2, axis=0)
         latent = mean + std * np.random.randn(*mean.shape).astype(mean.dtype)
@@ -165,7 +167,7 @@ class ImageNetLatentIterator(Dataset):
 
         label = torch.tensor(label)
 
-        return latent, label, pos, mask
+        return latent, label, pos, mask, h, w
 
 
 def create_dataloader_imagenet_preprocessing(
