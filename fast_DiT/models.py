@@ -167,7 +167,7 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
 #     k = ops.reshape(k, k_shape)
 #     return q, k
 
-
+# TODO: Implement with torchtune.modules.RotaryPositionalEmbeddings
 def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
     q_shape = q.shape
     k_shape = k.shape

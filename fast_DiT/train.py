@@ -163,11 +163,11 @@ def main(args):
     opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
 
     # Setup data:
-    features_dir = f"{args.feature_path}/imagenet256_features"
-    labels_dir = f"{args.feature_path}/imagenet256_labels"
+    features_dir = f"{args.feature_path}"
+    # labels_dir = f"{args.feature_path}/imagenet256_labels"
     # dataset = CustomDataset(features_dir, labels_dir)
     dataset = ImageNetLatentIterator({
-        "latent_folder": '../latent_two',  # 'latent_two' is the folder containing the latent features
+        "latent_folder": features_dir,
         "sample_size": 256,
         "patch_size": 2,
         "vae_scale": 8,
