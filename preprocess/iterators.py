@@ -161,7 +161,7 @@ class ImageNetLatentIterator(Dataset):
             0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
 
         mask = torch.tensor(mask)
-        mask = torch.nn.functional.pad(mask, (0, self.max_length - pos.shape[0]))
+        mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
 
         label = torch.tensor(label)
 
