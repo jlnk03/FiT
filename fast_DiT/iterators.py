@@ -88,7 +88,8 @@ class ImageNetLatentIterator(Dataset):
         self.C = config.get("C", 4)
         self.max_length = self.sample_size * self.sample_size // self.patch_size // self.patch_size // self.vae_scale // self.vae_scale
 
-        self.embed_dim = config.get("embed_dim", 16)
+        # self.embed_dim = config.get("embed_dim", 16)
+        self.embed_dim = 64 # For B/2 768/#heads = 768/12 = 64
         self.embed_method = config.get("embed_method", "rotate")
 
     def _inspect_latent(self, root: str) -> List[Dict[str, str]]:
