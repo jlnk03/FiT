@@ -1,4 +1,3 @@
-import models
 import torch
 from models import FiT
 import timm
