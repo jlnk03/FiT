@@ -466,8 +466,8 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def select_random_tokens(input: Tensor, selection: int) -> Tensor:
-        assert input.dim() == 1
+    def select_random_tokens(input: Tensor, selection: int, mask: Tensor ) -> Tensor:
+       
         assert selection <= input.shape[0]
 
         indices = torch.randperm(input.shape[0])[:selection]
