@@ -466,7 +466,7 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def select_random_tokens(x: Tensor, selection: int, mask: Tensor) -> Tensor:
+    def select_random_tokens(self, x: Tensor, selection: int, mask: Tensor) -> Tensor:
         indices = torch.randperm(x.shape[1])
 
         x_shuffled = x[:, indices, :]
