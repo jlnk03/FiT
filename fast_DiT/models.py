@@ -472,7 +472,7 @@ class FiT(nn.Module):
         x_shuffled = x[:, indices, :]
         mask_shuffled = mask[:, indices, :]
 
-        mask_sorted = torch.argsort(mask_shuffled, dim=1)
+        mask_sorted = torch.argsort(mask_shuffled, dim=1, descending=True)
 
         x_sorted = x_shuffled[mask_sorted]
 
