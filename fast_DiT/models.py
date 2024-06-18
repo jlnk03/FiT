@@ -465,7 +465,7 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int) -> Tensor:
+    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int, train=True) -> Tensor:
         """
         Forward pass of FiT.
         x: (N, C, H, W) tensor of latent token
@@ -497,7 +497,8 @@ class FiT(nn.Module):
         for block in self.blocks:
             x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
+        if not train:
+            x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
         return x
 
     # @ms.jit
