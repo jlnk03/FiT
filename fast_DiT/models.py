@@ -492,6 +492,7 @@ class FiT(nn.Module):
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
         # _, _, h, w = x.shape
         # x = self.patchify(x)
+        
         if self.pos == "absolute":
             # (N, T, D), where T = H * W / patch_size ** 2
             x = self.x_embedder(x) + pos.to(x.dtype)
