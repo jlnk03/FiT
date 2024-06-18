@@ -91,6 +91,8 @@ class ImageNetLatentIterator(Dataset):
         self.embed_dim = config.get("embed_dim", 16)
         self.embed_method = config.get("embed_method", "rotate")
 
+        self.number_of_tokens = 100
+
     def _inspect_latent(self, root: str) -> List[Dict[str, str]]:
         latent_info = list()
 
@@ -153,8 +155,12 @@ class ImageNetLatentIterator(Dataset):
         mask = np.ones(latent.shape[0], dtype=np.bool_)
 
         latent = torch.tensor(latent)
+        latent = latent[torch.randperm(latent.shape[0])]
+        latent = latent[:self.number_of_tokens]
         latent = torch.nn.functional.pad(latent, (
-            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.max_length - latent.shape[0]))
+            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.number_of_tokens - latent.shape[0]))
+
+        label = torch.tensor(label)
 
         pos = torch.tensor(pos)
         pos = torch.nn.functional.pad(pos, (
@@ -162,8 +168,6 @@ class ImageNetLatentIterator(Dataset):
 
         mask = torch.tensor(mask)
         mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
-
-        label = torch.tensor(label)
 
         return latent, label, pos, mask
 
