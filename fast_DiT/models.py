@@ -466,17 +466,17 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def subset_random_tokens(self, x: Tensor, mask: Tensor, number_of_tokens: int) -> Tensor:
+    def select_random_tokens( x: torch.Tensor, selection: int, mask: torch.Tensor) -> torch.Tensor:
         indices = torch.randperm(x.shape[1])
 
         x_shuffled = x[:, indices, :]
-        mask_shuffled = mask[:, indices, :]
+        mask_shuffled = mask[:, indices]
 
         mask_sorted = torch.argsort(mask_shuffled, dim=1, descending=True)
 
-        x_sorted = x_shuffled[mask_sorted]
+        x_sorted = x_shuffled[:, mask_sorted, :]
 
-        return x_sorted[:number_of_tokens]
+        return x_sorted[:selection]
 
     def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int) -> Tensor:
         """
@@ -492,6 +492,7 @@ class FiT(nn.Module):
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
         # _, _, h, w = x.shape
         # x = self.patchify(x)
+        
         if self.pos == "absolute":
             # (N, T, D), where T = H * W / patch_size ** 2
             x = self.x_embedder(x) + pos.to(x.dtype)
