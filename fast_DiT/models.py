@@ -152,14 +152,6 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
     return torch.stack([real_part, imag_part], dim=-1)
 
 
-def select_random_elements(input: Tensor, selection: int) -> Tensor:
-    assert input.dim() == 1
-    assert selection <= input.shape[0]
-
-    indices = torch.randperm(input.shape[0])[:selection]
-    return input[indices]
-
-
 
 # TODO: Implement with torchtune.modules.RotaryPositionalEmbeddings
 def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
@@ -473,6 +465,13 @@ class FiT(nn.Module):
         x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
         x = x.reshape(N, nh * nw, -1)
         return x
+
+    def select_random_tokens(input: Tensor, selection: int) -> Tensor:
+        assert input.dim() == 1
+        assert selection <= input.shape[0]
+
+        indices = torch.randperm(input.shape[0])[:selection]
+        return input[indices]
 
     def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int) -> Tensor:
         """
