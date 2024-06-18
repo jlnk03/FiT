@@ -353,6 +353,8 @@ class FiT(nn.Module):
         block_kwargs: Additional keyword arguments for the Transformer blocks. for example, `{'enable_flash_attention':True}`. Default: {}
     """
 
+    # TODO: Check learn_sigma. currently removed due to shape issues
+
     def __init__(
         self,
         patch_size: int = 2,
@@ -363,7 +365,7 @@ class FiT(nn.Module):
         mlp_ratio: float = 4.0,
         class_dropout_prob: float = 0.1,
         num_classes: int = 1000,
-        learn_sigma: bool = True,
+        learn_sigma: bool = False,
         ffn: Literal["swiglu", "mlp"] = "swiglu",
         pos: Literal["rotate", "absolute"] = "rotate",
         block_kwargs: Dict[str, Any] = {},
