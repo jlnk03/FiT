@@ -3,16 +3,17 @@ import torch
 import timm
 
 def select_random_tokens( x: torch.Tensor, selection: int, mask: torch.Tensor) -> torch.Tensor:
-        indices = torch.randperm(x.shape[1])
+         indices = torch.randperm(x.shape[1])
+ 
+         x_shuffled = x[:, indices, :]
+         mask_shuffled = mask[:, indices].unsqueeze(1)
 
-        x_shuffled = x[:, indices, :]
-        mask_shuffled = mask[:, indices]
-
-        mask_sorted = torch.argsort(mask_shuffled, dim=1, descending=True)
-
-        x_sorted = x_shuffled[mask_sorted]
-
-        return x_sorted[:selection]
+ 
+         mask_sorted = torch.argsort(mask_shuffled, dim=1, descending=True)
+ 
+         x_sorted = x_shuffled[mask_sorted]
+ 
+         return x_sorted[:, :selection, :]
 
 def select_random_tokens2( x: torch.Tensor, selection: int, mask: torch.Tensor) -> torch.Tensor:
         batch_size, num_tokens, token_dim = input.shape
