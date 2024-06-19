@@ -28,7 +28,7 @@ class FiTModule(L.LightningModule):
         self.diffusion = create_diffusion(timestep_respacing="")
         self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
         self.automatic_optimization = False  # To handle optimizer steps manually
-
+        self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
 
         self.save_hyperparameters()
 
@@ -39,7 +39,24 @@ class FiTModule(L.LightningModule):
         latent, label, pos, mask, h, w = batch
         t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
-        loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
+
+        loss_dict = {}
+
+        # Add noise to the latent and calculate the loss
+        noise = torch.randn(latent.shape, device=self.device)
+
+        x_t = self.noise_scheduler.add_noise(latent, noise, t)
+
+        model_output = self.model(x_t, t=t, y=label, **model_kwargs)
+
+        # Apply the mask to the model output and the target
+        masked_model_output = model_output[mask]
+        masked_target = latent[mask]
+
+        loss_dict['mse'] = F.mse_loss(masked_model_output, masked_target)
+        loss_dict['loss'] = loss_dict['mse']
+
+        # loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
         loss = loss_dict["loss"].mean()
 
         # Manual optimization
