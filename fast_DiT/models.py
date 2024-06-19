@@ -152,6 +152,7 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
     return torch.stack([real_part, imag_part], dim=-1)
 
 
+
 # TODO: Implement with torchtune.modules.RotaryPositionalEmbeddings
 def apply_rotary_emb(q: Tensor, k: Tensor, freqs_cis: Tensor) -> Tuple[Tensor, Tensor]:
     q_shape = q.shape
@@ -481,6 +482,7 @@ class FiT(nn.Module):
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
         # _, _, h, w = x.shape
         # x = self.patchify(x)
+        
         if self.pos == "absolute":
             # (N, T, D), where T = H * W / patch_size ** 2
             x = self.x_embedder(x) + pos.to(x.dtype)
