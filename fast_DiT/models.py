@@ -466,18 +466,6 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def select_random_tokens( x: torch.Tensor, selection: int, mask: torch.Tensor) -> torch.Tensor:
-        indices = torch.randperm(x.shape[1])
-
-        x_shuffled = x[:, indices, :]
-        mask_shuffled = mask[:, indices]
-
-        mask_sorted = torch.argsort(mask_shuffled, dim=1, descending=True)
-
-        x_sorted = x_shuffled[:, mask_sorted, :]
-
-        return x_sorted[:selection]
-
     def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int) -> Tensor:
         """
         Forward pass of FiT.
