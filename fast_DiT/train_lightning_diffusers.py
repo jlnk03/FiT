@@ -47,7 +47,7 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
-        model_output = self.model(x_t, t=t, y=label, **model_kwargs)
+        model_output = self.model(x_t, t=t, **model_kwargs)
 
         # Apply the mask to the model output and the target
         masked_model_output = model_output[mask]
@@ -139,6 +139,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--feature-path", type=str, default="features")
+    parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
     parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
