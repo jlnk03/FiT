@@ -6,8 +6,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
-from fast_DiT.models.fit import FiT_models
-from fast_DiT.preprocess.iterators import ImageNetLatentIterator
+from models.fit import FiT_models
+from preprocess.iterators import ImageNetLatentIterator
 import lightning as L
 from torch.utils.data import DataLoader
 from copy import deepcopy
@@ -104,7 +104,6 @@ def main(args):
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        gpus=-1 if torch.cuda.is_available() else 0,
         # accelerator='ddp',
         accelerator='mps',
         logger=wandb_logger,
