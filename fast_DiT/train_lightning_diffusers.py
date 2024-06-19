@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from copy import deepcopy
 from collections import OrderedDict
 from diffusers import DDIMScheduler
-import torch.functional as F
+import torch.nn.functional as F
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
