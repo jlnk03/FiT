@@ -15,7 +15,7 @@ from torch.nn import GELU
 
 # from flash_attention import MSFlashAttention
 
-from dit import FinalLayer
+from fast_DiT.models.dit import FinalLayer
 # from utils import modulate
 
 from torch.nn import LayerNorm
