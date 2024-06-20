@@ -4,8 +4,6 @@ import argparse
 from lightning import Trainer, seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
-from diffusion import create_diffusion
-from diffusers.models import AutoencoderKL
 from models.dit import DiT_models
 from preprocess.iterators import ImageNetLatentIterator
 import lightning as L
@@ -15,9 +13,6 @@ from collections import OrderedDict
 from diffusers import DDIMScheduler
 import torch.nn.functional as F
 
-#################################################################################
-#                                  PyTorch Lightning Module                     #
-#################################################################################
 
 class FiTModule(L.LightningModule):
     def __init__(self, args):
@@ -25,8 +20,6 @@ class FiTModule(L.LightningModule):
         self.args = args
         self.model = DiT_models[args.model]()
         self.ema = deepcopy(self.model)
-        self.diffusion = create_diffusion(timestep_respacing="")
-        self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
 
@@ -48,20 +41,13 @@ class FiTModule(L.LightningModule):
 
         loss = F.mse_loss(model_output[mask], noise[mask]).mean()
 
-        # Manual optimization
-        # opt = self.optimizers()
-        # opt.zero_grad()
-        # self.manual_backward(loss)
-        # opt.step()
-
-        # self.update_ema(self.ema, self.model)
-
-        # Logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
+
         return optimizer
 
     @torch.no_grad()
@@ -93,9 +79,6 @@ class FiTModule(L.LightningModule):
         )
         return loader
 
-#################################################################################
-#                                 Main Function                                 #
-#################################################################################
 
 def main(args):
     seed_everything(args.global_seed)
@@ -113,7 +96,6 @@ def main(args):
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        # accelerator='ddp',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
         precision=16 if torch.cuda.is_available() else 32,
@@ -125,8 +107,10 @@ def main(args):
     
     trainer.fit(model)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--feature-path", type=str, default="features")
     parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
@@ -138,7 +122,9 @@ if __name__ == "__main__":
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=100)
+    parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=10_000)
+
     args = parser.parse_args()
+
     main(args)
