@@ -145,13 +145,8 @@ class ImageNetLatentIterator(Dataset):
 
         h, w = latent.shape[1:]
 
-        # N(mean, std)
-        mean, std = np.split(latent, 2, axis=0)
-        latent = mean + std * np.random.randn(*mean.shape).astype(mean.dtype)
-
         latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
-
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
 

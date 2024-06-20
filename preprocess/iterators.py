@@ -88,7 +88,7 @@ class ImageNetLatentIterator(Dataset):
         self.C = config.get("C", 4)
         self.max_length = self.sample_size * self.sample_size // self.patch_size // self.patch_size // self.vae_scale // self.vae_scale
 
-        self.embed_dim = config.get("embed_dim", 16)
+        self.embed_dim = config.get("embed_dim", 64)
         self.embed_method = config.get("embed_method", "rotate")
 
         self.number_of_tokens = config.get("number_of_tokens", 128)
@@ -144,12 +144,9 @@ class ImageNetLatentIterator(Dataset):
 
         latent = np.load(x["path"])
 
-        # N(mean, std)
-        mean, std = np.split(latent, 2, axis=0)
+        height, width = latent.shape[1:]
 
-        latent = mean + std * np.random.randn(*mean.shape).astype(mean.dtype)
         latent = self._random_horiztotal_flip(latent)
-
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
@@ -169,7 +166,7 @@ class ImageNetLatentIterator(Dataset):
         mask = torch.tensor(mask)
         mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
 
-        return latent, label, pos, mask
+        return latent, label, pos, mask, height, width
 
 
 def create_dataloader_imagenet_preprocessing(
