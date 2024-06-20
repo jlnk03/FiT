@@ -39,7 +39,7 @@ class FiTModule(L.LightningModule):
         latent, label, pos, mask, h, w = batch
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
 
-        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
+        t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
 
         noise = torch.randn(latent.shape, device=self.device)
 
