@@ -102,8 +102,6 @@ def main(args):
         accumulate_grad_batches=8,
         log_every_n_steps=args.log_every
     )
-
-    model = torch.compile(model, mode="reduce-overhead")
     
     trainer.fit(model)
 
