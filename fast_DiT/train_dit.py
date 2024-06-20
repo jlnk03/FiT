@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument("--feature-path", type=str, default="features")
     parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
+    parser.add_argument("--model", type=str, choices=list(DiT_models.keys()), default="FiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1400)
