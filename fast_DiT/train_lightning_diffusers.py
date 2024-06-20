@@ -104,7 +104,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training", project="GSU_FiT")
+    wandb_logger = WandbLogger(name="train", project="FiT")
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
@@ -115,7 +115,6 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.epochs,
         # accelerator='ddp',
-        accelerator='mps',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
         precision=16 if torch.cuda.is_available() else 32,
