@@ -37,27 +37,17 @@ class FiTModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
 
-        loss_dict = {}
+        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
 
-        # Add noise to the latent and calculate the loss
         noise = torch.randn(latent.shape, device=self.device)
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        # Apply the mask to the model output and the target
-        masked_model_output = model_output[mask]
-        masked_target = latent[mask]
-
-        loss_dict['mse'] = F.mse_loss(masked_model_output, masked_target)
-        loss_dict['loss'] = loss_dict['mse']
-
-        # loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
-        loss = loss_dict["loss"].mean()
+        loss = F.mse_loss(model_output[mask], noise[mask]).mean()
 
         # Manual optimization
         opt = self.optimizers()
