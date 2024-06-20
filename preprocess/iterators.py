@@ -91,7 +91,7 @@ class ImageNetLatentIterator(Dataset):
         self.embed_dim = config.get("embed_dim", 16)
         self.embed_method = config.get("embed_method", "rotate")
 
-        self.number_of_tokens = 100
+        self.number_of_tokens = config.get("number_of_tokens", 128)
 
     def _inspect_latent(self, root: str) -> List[Dict[str, str]]:
         latent_info = list()
