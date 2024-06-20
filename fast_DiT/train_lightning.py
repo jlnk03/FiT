@@ -27,7 +27,7 @@ class FiTModule(L.LightningModule):
         self.ema = deepcopy(self.model)
         self.diffusion = create_diffusion(timestep_respacing="")
         self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
-        self.automatic_optimization = False  # To handle optimizer steps manually
+        self.automatic_optimization = True
 
 
         self.save_hyperparameters()
@@ -43,12 +43,12 @@ class FiTModule(L.LightningModule):
         loss = loss_dict["loss"].mean()
 
         # Manual optimization
-        opt = self.optimizers()
-        opt.zero_grad()
-        self.manual_backward(loss)
-        opt.step()
+        # opt = self.optimizers()
+        # opt.zero_grad()
+        # self.manual_backward(loss)
+        # opt.step()
 
-        self.update_ema(self.ema, self.model)
+        # self.update_ema(self.ema, self.model)
 
         # Logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
