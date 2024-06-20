@@ -244,7 +244,7 @@ class DiT(nn.Module):
         for block in self.blocks:
             x = block(x, c)                      # (N, T, D)
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
-        x = self.unpatchify(x)                   # (N, out_channels, H, W)
+        #x = self.unpatchify(x)                   # (N, out_channels, H, W)
         return x
 
     def forward_with_cfg(self, x, t, y, cfg_scale):
