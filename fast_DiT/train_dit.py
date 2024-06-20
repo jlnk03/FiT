@@ -37,7 +37,6 @@ class FiTModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
 
@@ -45,7 +44,7 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
-        model_output = self.model(x_t, t=t, **model_kwargs)
+        model_output = self.model(x=x_t, t=t, y=label)
 
         loss = F.mse_loss(model_output[mask], noise[mask]).mean()
 
