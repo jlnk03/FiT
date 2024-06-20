@@ -37,7 +37,7 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
-        model_output = self.model(x=x_t, t=t, y=label, pos=pos)
+        model_output = self.model(x=x_t, t=t, y=label)
 
         loss = F.mse_loss(model_output[mask], noise[mask]).mean()
 
