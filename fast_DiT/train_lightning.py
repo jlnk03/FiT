@@ -1,4 +1,5 @@
 import os
+from lightning.pytorch.utilities.types import EVAL_DATALOADERS
 import torch
 import argparse
 from lightning import Trainer, seed_everything
@@ -46,17 +47,20 @@ class FiTModule(L.LightningModule):
         loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
         loss = loss_dict["loss"].mean()
 
-        # Manual optimization
-        # opt = self.optimizers()
-        # opt.zero_grad()
-        # self.manual_backward(loss)
-        # opt.step()
-
-        # self.update_ema(self.ema, self.model)
-
         # Logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
+    
+    def validation_step(self, batch, batch_idx):
+        latent, label, pos, mask, h, w = batch
+        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
+        val_loss = loss_dict["loss"].mean()
+        
+        # Logging
+        self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        return val_loss
     
     def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
             # Setup PyTorch:
@@ -141,6 +145,26 @@ class FiTModule(L.LightningModule):
             drop_last=True
         )
         return loader
+    
+    def val_dataloader(self):
+        dataset = ImageNetLatentIterator({
+            "latent_folder": self.args.val_path,
+            "sample_size": 256,
+            "patch_size": 2,
+            "vae_scale": 8,
+            "C": 4,
+            "embed_dim": 16,
+            "embed_method": "rotate"
+        })
+        loader = DataLoader(
+            dataset,
+            batch_size=self.args.global_batch_size,
+            shuffle=False,
+            num_workers=self.args.num_workers,
+            pin_memory=True,
+            drop_last=True
+        )
+        return loader
 
 #################################################################################
 #                                 Main Function                                 #
@@ -180,6 +204,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--feature-path", type=str, default="features")
+    parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
     parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
