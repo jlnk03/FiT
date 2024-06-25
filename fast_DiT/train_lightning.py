@@ -113,7 +113,7 @@ def main(args):
         # accelerator='ddp',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
-        precision='bf16',
+        precision='bf16-mixed',
         accumulate_grad_batches=8,
         profiler=profiler,
         log_every_n_steps=args.log_every
