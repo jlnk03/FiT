@@ -16,7 +16,8 @@ from diffusers.models import AutoencoderKL
 from download import find_model
 from models import DiT_models
 import argparse
-
+from samplesupport import get_2d_sincos_pos_embed , get_1d_sincos_pos_embed , precompute_freqs_cis_2d
+from samplesupport
 
 def main(args):
     # Setup PyTorch:
@@ -44,7 +45,7 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
 
     # Labels to condition the model with (feel free to change):
-    class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+    class_labels = [207]
 
     # Create sampling noise:
     n = len(class_labels)
@@ -56,6 +57,8 @@ def main(args):
     y_null = torch.tensor([1000] * n, device=device)
     y = torch.cat([y, y_null], 0)
     model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
+
+
 
     # Sample images:
     samples = diffusion.p_sample_loop(
