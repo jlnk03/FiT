@@ -108,7 +108,6 @@ def main(args):
     trainer = Trainer(
         max_epochs=args.epochs,
         # accelerator='ddp',
-        accelerator='mps',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
         precision=16 if torch.cuda.is_available() else 32,
