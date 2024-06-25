@@ -192,7 +192,7 @@ def main(args):
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
         precision='bf16-mixed',
-        accumulate_grad_batches=8,
+        accumulate_grad_batches=2,
         profiler=profiler,
         log_every_n_steps=args.log_every
     )
