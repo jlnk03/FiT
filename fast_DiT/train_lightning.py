@@ -15,6 +15,9 @@ from collections import OrderedDict
 from diffusers import DDIMScheduler
 import torch.functional as F
 from lightning.pytorch.profilers import AdvancedProfiler
+from torch import Tensor
+from typing import Any, Dict, Tuple, Type, Union
+from torchvision.utils import save_image
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -54,6 +57,57 @@ class FiTModule(L.LightningModule):
         # Logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
+    
+    def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
+            # Setup PyTorch:
+            torch.manual_seed(args.seed)
+            torch.set_grad_enabled(False)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            if args.ckpt is None:
+                assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
+                assert args.image_size in [256, 512]
+                assert args.num_classes == 1000
+
+            # Load model:
+            latent_size = args.image_size // 8
+            FiT_model = FiT_models[args.model](
+                input_size=latent_size,
+                num_classes=args.num_classes
+            ).to(device)
+            # load a custom FiT checkpoint from train.py:
+            # ckpt_path = args.ckpt or f"FiT-B-2.pt"
+            # state_dict = find_model(ckpt_path)
+            # model.load_state_dict(state_dict)
+            model = FiT_model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
+            model.eval()  # important!
+            diffusion = create_diffusion(str(args.num_sampling_steps))
+            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+
+            # Labels to condition the model with (feel free to change):
+            class_labels = [207]
+
+            # Create sampling noise:
+            n = len(class_labels)
+            z = torch.randn(n, 4, latent_size, latent_size, device=device)
+            y = torch.tensor(class_labels, device=device)
+
+            # Setup classifier-free guidance:
+            z = torch.cat([z, z], 0)
+            y_null = torch.tensor([1000] * n, device=device)
+            y = torch.cat([y, y_null], 0)
+            # TODO: add mask and pos
+            model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
+
+            # Sample images:
+            samples = diffusion.p_sample_loop(
+                model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+            )
+            samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+            samples = vae.decode(samples / 0.18215).sample
+
+            # Save and display images:
+            save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(-1, 1))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)

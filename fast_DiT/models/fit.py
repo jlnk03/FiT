@@ -468,7 +468,7 @@ class FiT(nn.Module):
         x = x.reshape(N, nh * nw, -1)
         return x
 
-    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, h: int, w: int, train=True) -> Tensor:
+    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, train=True) -> Tensor:
         """
         Forward pass of FiT.
         x: (N, C, H, W) tensor of latent token
@@ -480,8 +480,9 @@ class FiT(nn.Module):
         w: width of the input image latent
         """
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
-        # _, _, h, w = x.shape
-        # x = self.patchify(x)
+        if not train:
+            _, _, h, w = x.shape
+            x = self.patchify(x)
         
         if self.pos == "absolute":
             # (N, T, D), where T = H * W / patch_size ** 2
@@ -522,7 +523,7 @@ class FiT(nn.Module):
     #     eps = ops.cat([half_eps, half_eps], axis=0)
     #     return ops.cat([eps, rest], axis=1)
 
-    def construct_with_cfg(
+    def forward_with_cfg(
         self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]
     ) -> Tensor:
         """
@@ -531,7 +532,8 @@ class FiT(nn.Module):
         # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
-        model_out = self.forward(combined, t, y, pos, mask)
+        # TODO: patchify/make sure x is passed with h, w
+        model_out = self.forward(combined, t, y, pos, mask, train=False)
         eps, rest = model_out[:,
                               : self.in_channels], model_out[:, self.in_channels:]
         cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
