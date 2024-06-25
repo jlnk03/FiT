@@ -503,6 +503,7 @@ class FiT(nn.Module):
             x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
         if not train:
+            x = x[mask]
             x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
         return x
 
