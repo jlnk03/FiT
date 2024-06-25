@@ -161,7 +161,7 @@ def apply_2d_rotary_pos(q: torch.Tensor, k: torch.Tensor, freqs_cis: torch.Tenso
     k = torch.cat([k1, k2], dim=-1)
     return q, k
 
-
+######
 def resize_call( img: Image.Image , max_size: int = 256, scale: int = 8   ) -> Image.Image:
     w, h = img.size
     image_area = w * h
@@ -183,7 +183,7 @@ def resize_call( img: Image.Image , max_size: int = 256, scale: int = 8   ) -> I
     return img
 
 
-def _inspect_images( root: str) -> List[str]:
+def inspect_images( root: str) -> List[str]:
     images_info = list()
 
     for dirpath, _, filenames in os.walk(root):
@@ -199,7 +199,7 @@ def _inspect_images( root: str) -> List[str]:
     images_info = sorted(images_info)
     return images_info
 
-def __len__(image_paths):
+def len(image_paths):
     return len(image_paths)
 
 def __getitem__(image_paths,index):
@@ -214,10 +214,7 @@ def __getitem__(image_paths,index):
 
     return img, path
 
-
-
-
-def _inspect_latent(root: str) -> List[Dict[str, str]]:
+def inspect_latent(root: str) -> List[Dict[str, str]]:
     latent_info = list()
 
     for dirpath, _, filenames in os.walk(root):
@@ -233,62 +230,62 @@ def _inspect_latent(root: str) -> List[Dict[str, str]]:
     latent_info = sorted(latent_info, key=lambda x: x["path"])
     return latent_info
 
-def _create_label_mapping(self, latent_info: List[Dict[str, str]]):
+def create_label_mapping( latent_info: List[Dict[str, str]]):
     labels = set([x["label"] for x in latent_info])
     labels = sorted(list(labels))
     labels = dict(zip(labels, np.arange(len(labels), dtype=np.int32)))
     return labels
 
-def __len__(self):
-    return len(self.latent_info)
+#def length(self):
+ #   return len(self.latent_info)
 
-def _random_horiztotal_flip(self, latent: np.ndarray) -> np.ndarray:
+def random_horiztotal_flip( latent: np.ndarray,) -> np.ndarray:
     if random.random() < 0.5:
         # perform a random horizontal flip in latent domain
         # mimic the effect of horizontal flip in image (not exactly identical)
         latent = latent[..., ::-1]
     return latent
 
-def _patchify(self, latent: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def patchify( latent: np.ndarray, patch_size: int = 2, embed_dim: int = 64, embed_method: str = "rotate") -> Tuple[np.ndarray, np.ndarray]:
     c, h, w = latent.shape
-    nh, nw = h // self.patch_size, w // self.patch_size
+    nh, nw = h // patch_size, w // patch_size
 
-    latent = np.reshape(latent, (c, nh, self.patch_size, nw, self.patch_size))
+    latent = np.reshape(latent, (c, nh, patch_size, nw, patch_size))
     latent = np.transpose(latent, (1, 3, 2, 4, 0))  # nh, nw, patch, patch, c
     latent = np.reshape(latent, (nh * nw, -1))  # nh * nw, patch * patch * c
 
-    if self.embed_method == "rotate":
-        pos = precompute_freqs_cis_2d(self.embed_dim, nh, nw).astype(np.float32)
+    if embed_method == "rotate":
+        pos = precompute_freqs_cis_2d(embed_dim, nh, nw).astype(np.float32)
     else:
-        pos = get_2d_sincos_pos_embed(self.embed_dim, nh, nw).astype(np.float32)
+        pos = get_2d_sincos_pos_embed(embed_dim, nh, nw).astype(np.float32)
     return latent, pos
 
-def __getitem__(self, idx):
-    x = self.latent_info[idx]
+def getitem(latent, number_of_tokens,patch_size,embed_dim,max_length):
+    #x = latent_info[idx]
 
-    latent = np.load(x["path"])
-
+    #latent = np.load(x["path"])
+    C = 4
     height, width = latent.shape[1:]
-
-    latent = self._random_horiztotal_flip(latent)
-    latent, pos = self._patchify(latent)
-    label = self.label_mapping[x["label"]]
+    
+    #latent = random_horiztotal_flip(latent)
+    latent, pos = patchify(latent)
+    #label = create_label_mapping[x["label"]]
     mask = np.ones(latent.shape[0], dtype=np.bool_)
 
     latent = torch.tensor(latent)
     latent = latent[torch.randperm(latent.shape[0])]
-    latent = latent[:self.number_of_tokens]
+    latent = latent[:number_of_tokens]
     latent = torch.nn.functional.pad(latent, (
-        0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.number_of_tokens - latent.shape[0]))
+        0, patch_size * patch_size * C - latent.shape[1], 0, number_of_tokens - latent.shape[0]))
 
     label = torch.tensor(label)
 
     pos = torch.tensor(pos)
     pos = torch.nn.functional.pad(pos, (
-        0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
+        0, embed_dim - pos.shape[1], 0, max_length - pos.shape[0]))
 
     mask = torch.tensor(mask)
-    mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
+    mask = torch.nn.functional.pad(mask, (0, max_length - mask.shape[0]))
 
     return latent, label, pos, mask, height, width
 
