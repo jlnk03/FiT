@@ -14,6 +14,7 @@ from copy import deepcopy
 from collections import OrderedDict
 from diffusers import DDIMScheduler
 import torch.functional as F
+from lightning.pytorch.profilers import AdvancedProfiler
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -104,14 +105,17 @@ def main(args):
         save_top_k=-1,  # Save all models
         every_n_train_steps=args.ckpt_every
     )
+
+    profiler = AdvancedProfiler(dirpath=args.results_dir, filename="perf_logs")
     
     trainer = Trainer(
         max_epochs=args.epochs,
         # accelerator='ddp',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
-        precision=16 if torch.cuda.is_available() else 32,
+        precision='bf16',
         accumulate_grad_batches=8,
+        profiler=profiler,
         log_every_n_steps=args.log_every
     )
 
