@@ -262,7 +262,7 @@ def patchify( latent: np.ndarray, patch_size: int = 2, embed_dim: int = 64, embe
 
 def getitem(latent, number_of_tokens,patch_size,embed_dim,max_length):
     #x = latent_info[idx]
-    ## latent  = noise
+    ## latent  =
     #latent = np.load(x["path"])
     C = 4
     height, width = latent.shape[1:]
