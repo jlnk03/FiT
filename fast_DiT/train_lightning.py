@@ -19,6 +19,7 @@ from lightning.pytorch.profilers import AdvancedProfiler
 from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
 from torchvision.utils import save_image
+from ema import EMA
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -29,11 +30,10 @@ class FiTModule(L.LightningModule):
         super().__init__()
         self.args = args
         self.model = FiT_models[args.model]()
-        self.ema = deepcopy(self.model)
         self.diffusion = create_diffusion(timestep_respacing="")
-        self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
         self.automatic_optimization = True
 
+        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
 
         self.save_hyperparameters()
 
@@ -117,14 +117,14 @@ class FiTModule(L.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
         return optimizer
 
-    @torch.no_grad()
-    def update_ema(self, ema_model, model, decay=0.9999):
-        ema_params = OrderedDict(ema_model.named_parameters())
-        model_params = OrderedDict(model.named_parameters())
+    # @torch.no_grad()
+    # def update_ema(self, ema_model, model, decay=0.9999):
+    #     ema_params = OrderedDict(ema_model.named_parameters())
+    #     model_params = OrderedDict(model.named_parameters())
 
-        for name, param in model_params.items():
-            name = name.replace("module.", "")
-            ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
+    #     for name, param in model_params.items():
+    #         name = name.replace("module.", "")
+    #         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
     def train_dataloader(self):
         dataset = ImageNetLatentIterator({
@@ -176,7 +176,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training", project="GSU_FiT")
+    wandb_logger = WandbLogger(name="FiT_Training_new", project="FiT")
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
@@ -184,20 +184,20 @@ def main(args):
         every_n_train_steps=args.ckpt_every
     )
 
+    ema_callback = EMA(decay=0.9999)
+
     profiler = AdvancedProfiler(dirpath=args.results_dir, filename="perf_logs")
     
     trainer = Trainer(
         max_epochs=args.epochs,
         # accelerator='ddp',
         logger=wandb_logger,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
         accumulate_grad_batches=2,
         profiler=profiler,
         log_every_n_steps=args.log_every
     )
-
-    model = torch.compile(model, mode="reduce-overhead")
     
     trainer.fit(model)
 
