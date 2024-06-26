@@ -5,7 +5,6 @@ from collections import OrderedDict
 import lightning as L
 import torch
 import torch._dynamo
-import torch.nn.functional as F
 
 from diffusers import DDIMScheduler
 from lightning import Trainer, seed_everything
@@ -38,6 +37,9 @@ class FiTModule(L.LightningModule):
 
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
+        #
+        # LOOKUP: Mindone uses betas, huge part missing here
+        #
         # Did they use DDIM with 1000 steps in FiT? Did they use the default betas in FiT?
 
         self.save_hyperparameters()
@@ -50,6 +52,9 @@ class FiTModule(L.LightningModule):
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
+        #
+        # LOOKUP: Mindone basically has the same line of code in training
+        #
         # Do they use uniform timestep sampling?
 
         noise = torch.randn(latent.shape, device=self.device)
@@ -58,8 +63,15 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = F.mse_loss(model_output[mask], noise[
-            mask]).mean()  # TODO: .sum() / mask.sum() do we need to take into account how much is masked?
+        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+        # TODO: .sum() / mask.sum() do we need to take into account how much is masked?
+        #
+        # LOOKUP: Mindone uses MSE per image normalized by number of unmasked tokens,
+        # masked tokens not included + something called vb and then calculates mean
+        # The noise is not rescaled (Many options as ground truth, but noise is never rescaled)
+        # A lot to do here
+        #
         # is this the same loss that is used in FiT? Epsilon without rescaling?
 
         # opt = self.optimizers()
@@ -68,12 +80,18 @@ class FiTModule(L.LightningModule):
         # opt.step()
 
         # self.update_ema(self.ema, self.model)
-
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
+    def loss(self, input, noise, mask):
+        diff = (torch.sum(input * mask, dim=1) / torch.sum(mask, dim=1) - torch.sum(noise * mask, dim=1) / torch.sum(mask, dim=1)).mean()
+
+        return diff.mean()
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
+        # LOOKUP: Optimizer, learning_rate and weight decay correct corresponding to paper
+        #
         # is this the same optimizer, learning rate scheduler, ... that is used in FiT?
         return optimizer
 
