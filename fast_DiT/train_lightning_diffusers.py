@@ -1,19 +1,21 @@
-import os
-import torch
 import argparse
+import os
+from collections import OrderedDict
+
+import lightning as L
+import torch
+import torch._dynamo
+import torch.nn.functional as F
+
+from diffusers import DDIMScheduler
 from lightning import Trainer, seed_everything
-from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
-from diffusion import create_diffusion
-from diffusers.models import AutoencoderKL
+from lightning.pytorch.loggers import WandbLogger
+from torch.utils.data import DataLoader
+
 from models.fit import FiT_models
 from preprocess.iterators import ImageNetLatentIterator
-import lightning as L
-from torch.utils.data import DataLoader
-from copy import deepcopy
-from collections import OrderedDict
-from diffusers import DDIMScheduler
-import torch.nn.functional as F
+
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -23,12 +25,20 @@ class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.model = FiT_models[args.model]()
-        self.ema = deepcopy(self.model)
-        self.diffusion = create_diffusion(timestep_respacing="")
-        self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
+        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        # torch.compile with max-autotune only on the model not on the LightningModule
+
+        # self.ema = deepcopy(self.model)
+        # see https://github.com/Lightning-AI/pytorch-lightning/issues/8100#issuecomment-867819299
+        # else the parameters are also taken into account for training
+
+        # self.vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}")
+        # We could either just load the vae in the beginning of the validation or implement some offloading
+        # (it can't be found by PyTorch Ligtning else it is moved automatically). It isn't needed during training
+
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
+        # Did they use DDIM with 1000 steps in FiT? Did they use the default betas in FiT?
 
         self.save_hyperparameters()
 
@@ -40,6 +50,7 @@ class FiTModule(L.LightningModule):
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
+        # Do they use uniform timestep sampling?
 
         noise = torch.randn(latent.shape, device=self.device)
 
@@ -47,9 +58,10 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = F.mse_loss(model_output[mask], noise[mask]).mean()
+        loss = F.mse_loss(model_output[mask], noise[
+            mask]).mean()  # TODO: .sum() / mask.sum() do we need to take into account how much is masked?
+        # is this the same loss that is used in FiT? Epsilon without rescaling?
 
-        # Manual optimization
         # opt = self.optimizers()
         # opt.zero_grad()
         # self.manual_backward(loss)
@@ -57,12 +69,12 @@ class FiTModule(L.LightningModule):
 
         # self.update_ema(self.ema, self.model)
 
-        # Logging
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
+        # is this the same optimizer, learning rate scheduler, ... that is used in FiT?
         return optimizer
 
     @torch.no_grad()
@@ -94,52 +106,55 @@ class FiTModule(L.LightningModule):
         )
         return loader
 
+
 #################################################################################
 #                                 Main Function                                 #
 #################################################################################
 
 def main(args):
+    torch._dynamo.config.suppress_errors = True
     seed_everything(args.global_seed)
-    
+
     model = FiTModule(args)
-    
+
     # Initialize W&B logger
     wandb_logger = WandbLogger(name="train", project="FiT")
-    
+
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
         save_top_k=-1,  # Save all models
         every_n_train_steps=args.ckpt_every
     )
-    
+
     trainer = Trainer(
         max_epochs=args.epochs,
-        # accelerator='ddp',
         logger=wandb_logger,
         callbacks=[checkpoint_callback],
-        precision=16 if torch.cuda.is_available() else 32,
-        accumulate_grad_batches=8,
-        log_every_n_steps=args.log_every
+        precision="16-mixed" if torch.cuda.is_available() else 32,
+        # If possible I would use bf16 but not possible on all GPUs
+        accumulate_grad_batches=1,
+        log_every_n_steps=args.log_every,
+
     )
 
-    model = torch.compile(model, mode="reduce-overhead")
-    
     trainer.fit(model)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--feature-path", type=str, default="features")
+    parser.add_argument("--feature-path", type=str, default="/storage/slurm/schnaus/latent_two/latent_two")
+    # Put the dataset in the /storage/slurm/<username> folder for a faster access
     parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
+    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-B/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1400)
-    parser.add_argument("--global-batch-size", type=int, default=256)
+    parser.add_argument("--global-batch-size", type=int, default=64)
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--log-every", type=int, default=100)
+    parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--ckpt-every", type=int, default=10_000)
     args = parser.parse_args()
     main(args)
