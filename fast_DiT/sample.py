@@ -18,7 +18,6 @@ from models import DiT_models
 import argparse
 from samplesupport import get_2d_sincos_pos_embed , get_1d_sincos_pos_embed , _precompute_freqs_cis_1d_from_grid, create_sinusoidal_positions , _precompute_freqs_cis_2d_from_grid
 from samplesupport import rotate_every_two, apply_rotary_pos_emb,apply_2d_rotary_pos, precompute_freqs_cis_2d, _get_2d_sincos_pos_embed_from_grid, _get_1d_sincos_pos_embed_from_grid
-from samplesupport import _ResizeByMaxValue , ImageNetLatentIterator , ImageNetWithPathIterator
 from samplesupport import create_dataloader_imagenet_preprocessing , create_dataloader_imagenet_latent
 from samplesupport import resize_call, inspect_images, len, inspect_latent, create_label_mapping, random_horiztotal_flip, _patchify, getitem
 
@@ -30,7 +29,7 @@ def main(args):
 
     if args.ckpt is None:
         assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
-        assert args.image_size in [256, 512]
+        assert args.image_size in [256, 256]
         assert args.num_classes == 1000
 
     # Load model:
@@ -61,7 +60,11 @@ def main(args):
     y = torch.cat([y, y_null], 0)
     model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
 
+    
     # here start implementing changes reggarding FIT
+
+    #getitem 
+    latent, label, pos, mask, height, width = getitem(noise,256,patch_size=2,embed_dim=64,max_length=256)
 
     # Sample images:
     samples = diffusion.p_sample_loop(
