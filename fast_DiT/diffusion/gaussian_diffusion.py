@@ -13,11 +13,23 @@ import enum
 from .diffusion_utils import discretized_gaussian_log_likelihood, normal_kl
 
 
-def mean_flat(tensor):
+# def mean_flat(tensor):
+#     """
+#     Take the mean over all non-batch dimensions.
+#     """
+#     return tensor.mean(dim=list(range(1, len(tensor.shape))))
+
+def mean_flat(tensor, mask):
     """
-    Take the mean over all non-batch dimensions.
+    Take the mean over all non-batch dimensions
+    When mask is not None, it calculate the mean of the valid region (mask=True)
     """
-    return tensor.mean(dim=list(range(1, len(tensor.shape))))
+    if mask is None:
+        return tensor.mean(axis=list(range(1, len(tensor.shape))))
+
+    tensor = tensor.masked_fill(~mask, 0.0)
+    num = th.clamp(mask.sum(axis=list(range(1, len(tensor.shape)))), min=1)
+    return tensor.sum(axis=list(range(1, len(tensor.shape)))) / num
 
 
 class ModelMeanType(enum.Enum):
