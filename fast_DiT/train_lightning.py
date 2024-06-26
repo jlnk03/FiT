@@ -190,7 +190,6 @@ def main(args):
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        # accelerator='ddp',
         logger=wandb_logger,
         callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
