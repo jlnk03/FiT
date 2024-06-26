@@ -8,7 +8,7 @@ import mindspore as ms
 
 def _load_torch_ckpt(ckpt_file):
     source_data = torch.load(ckpt_file, map_location="cpu")
-    if "state_dict" in source_data:
+    if ["state_dict"] in source_data:
         source_data = source_data["state_dict"]
     return source_data
 
@@ -34,18 +34,31 @@ def load_torch_ckpt(ckpt_path):
     return torch_params
 
 
-def convert_pt_name_to_ms(content: str) -> str:
-    # DiT embedding table name conversion
-    content = content.replace("y_embedder.embedding_table.weight", "y_embedder.embedding_table.embedding_table")
-    return content
+abs_path = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
+sdv2_dir = os.path.join(abs_path, "../../stable_diffusion_v2/")
+
+with open(os.path.join(sdv2_dir, "tools/model_conversion/ms_names_v2.txt")) as file_ms:
+    lines_ms = list(file_ms.readlines())
+    lines_ms = [line for line in lines_ms if line.startswith("first_stage_model")]
+with open(os.path.join(sdv2_dir, "tools/model_conversion/diffusers_vae_v2.txt")) as file_pt:
+    lines_pt_vae = list(file_pt.readlines())
+assert len(lines_ms) == len(lines_pt_vae)
 
 
 def torch_to_ms_weight(source_fp, target_fp):
     source_data = load_torch_ckpt(source_fp)
     target_data = []
-    for _name_pt in source_data:
-        _name_ms = convert_pt_name_to_ms(_name_pt)
-        _source_data = source_data[_name_pt].cpu().detach().numpy()
+    assert len(lines_pt_vae) == len(
+        source_data
+    ), f"Loaded pt VAE checkpoint has a wrong number of parameters! Expect to have {len(lines_pt_vae)} params, but got {len(source_data)}"
+    for i in range(len(lines_pt_vae)):
+        line_pt_vae, line_ms_vae = lines_pt_vae[i], lines_ms[i]
+        _name_pt, _, _ = line_pt_vae.strip().split("#")
+        _name_ms, shape, _ = line_ms_vae.strip().split("#")
+        shape = shape.replace("(", "").replace(")", "").split(",")
+        shape = [int(s) for s in shape if len(s) > 0]
+        _name_ms = _name_ms[len("first_stage_model.") :]
+        _source_data = source_data[_name_pt].cpu().detach().numpy().reshape(shape)
         target_data.append({"name": _name_ms, "data": ms.Tensor(_source_data)})
     ms.save_checkpoint(target_data, target_fp)
 
@@ -57,13 +70,13 @@ if __name__ == "__main__":
         "--source",
         "-s",
         type=str,
-        help="path to source torch checkpoint, which ends with .pt",
+        help="path to vae torch checkpoint",
     )
     parser.add_argument(
         "--target",
         "-t",
         type=str,
-        help="Filename to save. Specify folder, e.g., ./models, or file path which ends with .ckpt, e.g., ./models/dit.ckpt",
+        help="Filename to save. Specify folder, e.g., ./models, or file path which ends with .ckpt, e.g., ./models/vae.ckpt",
     )
 
     args = parser.parse_args()

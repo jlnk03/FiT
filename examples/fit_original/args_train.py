@@ -21,7 +21,7 @@ def parse_args():
     parser.add_argument("--data_path", default="dataset", type=str, help="data path")
     parser.add_argument("--output_path", default="output/", type=str, help="output directory to save training results")
     parser.add_argument(
-        "--pretrained_model_path", default="", type=str, help="Specify the pretrained fit model from this checkpoint"
+        "--pretrained_model_path", default="", type=str, help="Specify the pretrained fit_original model from this checkpoint"
     )
     # ms
     parser.add_argument("--device_target", type=str, default="Ascend", help="Ascend or GPU")
@@ -97,7 +97,7 @@ def parse_args():
         "--use_fp16",
         default=True,
         type=str2bool,
-        help="whether use fp16 for fit.",
+        help="whether use fp16 for fit_original.",
     )
     parser.add_argument(
         "--model_name",

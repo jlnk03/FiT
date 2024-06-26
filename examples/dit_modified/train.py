@@ -78,7 +78,7 @@ def main(args):
     set_logger(name="", output_dir=args.output_path, rank=rank_id, log_level=eval(args.log_level))
 
     # 2. model initiate and weight loading
-    # 2.1 dit
+    # 2.1 dit_modified
     logger.info(f"{args.model_name}-{args.image_size}x{args.image_size} init")
     latent_size = args.image_size // 8
     dit_model = DiT_models[args.model_name](
@@ -245,7 +245,7 @@ def main(args):
 
     if rank_id == 0:
         save_cb = EvalSaveCallback(
-            network=latent_diffusion_with_loss.network,  # save dit only
+            network=latent_diffusion_with_loss.network,  # save dit_modified only
             rank_id=rank_id,
             ckpt_save_dir=ckpt_dir,
             ema=ema,
@@ -275,7 +275,7 @@ def main(args):
                 f"MindSpore mode[GRAPH(0)/PYNATIVE(1)]: {args.mode}",
                 f"Distributed mode: {args.use_parallel}",
                 f"Data path: {args.data_path}",
-                f"Num params: {num_params:,} (dit: {num_params_dit:,}, vae: {num_params_vae:,})",
+                f"Num params: {num_params:,} (dit_modified: {num_params_dit:,}, vae: {num_params_vae:,})",
                 f"Num trainable params: {num_params_trainable:,}",
                 f"Use model dtype: {model_dtype}",
                 f"Learning rate: {args.start_learning_rate}",

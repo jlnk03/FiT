@@ -21,7 +21,7 @@ sys.path.insert(0, mindone_lib_path)
 
 from modules.autoencoder import SD_CONFIG, AutoencoderKL
 
-from examples.dit.pipelines.infer_pipeline import DiTInferPipeline
+from examples.dit_modified.pipelines.infer_pipeline import DiTInferPipeline
 from mindone.models.dit import DiT_models
 from mindone.utils.amp import auto_mixed_precision
 from mindone.utils.logger import set_logger
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     set_random_seed(args.seed)
 
     # 2. model initiate and weight loading
-    # 2.1 dit
+    # 2.1 dit_modified
     logger.info(f"{args.model_name}-{args.image_size}x{args.image_size} init")
     latent_size = args.image_size // 8
     dit_model = DiT_models[args.model_name](
@@ -214,7 +214,7 @@ if __name__ == "__main__":
         [
             f"MindSpore mode[GRAPH(0)/PYNATIVE(1)]: {args.mode}",
             f"Class labels: {class_labels}",
-            f"Num params: {num_params:,} (dit: {num_params_dit:,}, vae: {num_params_vae:,})",
+            f"Num params: {num_params:,} (dit_modified: {num_params_dit:,}, vae: {num_params_vae:,})",
             f"Num trainable params: {num_params_trainable:,}",
             f"Use model dtype: {model_dtype}",
             f"Sampling steps {args.sampling_steps}",

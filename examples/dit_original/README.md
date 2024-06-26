@@ -47,12 +47,12 @@ models/
 
 To run inference of `DiT-XL/2` model with the `256x256` image size on Ascend devices, you can use:
 ```bash
-python sample.py -c configs/inference/dit-xl-2-256x256.yaml
+python sample.py -c configs/inference/dit_original-xl-2-256x256.yaml
 ```
 
 To run inference of `DiT-XL/2` model with the `512x512` image size on Ascend devices, you can use:
 ```bash
-python sample.py -c configs/inference/dit-xl-2-512x512.yaml
+python sample.py -c configs/inference/dit_original-xl-2-512x512.yaml
 ```
 
 To run the same inference on GPU devices, simply set `--device_target GPU` for the commands above.

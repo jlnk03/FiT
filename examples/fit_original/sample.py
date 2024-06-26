@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument(
         "--config",
         "-c",
-        default="configs/inference/fit-xl-2-256x256.yaml",
+        default="configs/inference/fit_original-xl-2-256x256.yaml",
         type=str,
         help="path to load a config yaml file that describes the setting which will override the default arguments",
     )
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     set_random_seed(args.seed)
 
     # 2. model initiate and weight loading
-    # 2.1 fit
+    # 2.1 fit_original
     logger.info(f"{args.model_name}-{args.image_width}x{args.image_height} init")
     latent_height, latent_width = args.image_height // 8, args.image_width // 8
     fit_model = FiT_models[args.model_name](
@@ -206,7 +206,7 @@ if __name__ == "__main__":
         [
             f"MindSpore mode[GRAPH(0)/PYNATIVE(1)]: {args.mode}",
             f"Class labels: {class_labels}",
-            f"Num params: {num_params:,} (fit: {num_params_fit:,}, vae: {num_params_vae:,})",
+            f"Num params: {num_params:,} (fit_original: {num_params_fit:,}, vae: {num_params_vae:,})",
             f"Num trainable params: {num_params_trainable:,}",
             f"Use FP16: {args.use_fp16}",
             f"Sampling steps {args.sampling_steps}",
