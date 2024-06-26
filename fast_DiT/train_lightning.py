@@ -148,7 +148,7 @@ class FiTModule(L.LightningModule):
     
     def val_dataloader(self):
         dataset = ImageNetLatentIterator({
-            "latent_folder": self.args.val_path,
+            "latent_folder": self.args.feature_val_path,
             "sample_size": 256,
             "patch_size": 2,
             "vae_scale": 8,

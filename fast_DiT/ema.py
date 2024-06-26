@@ -17,11 +17,12 @@ import os
 import threading
 from typing import Any, Dict, Iterable
 
-import pytorch_lightning as pl
+import lightning as pl
 import torch
-from pytorch_lightning import Callback
-from pytorch_lightning.utilities.exceptions import MisconfigurationException
-from pytorch_lightning.utilities.rank_zero import rank_zero_info
+
+from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.utilities.exceptions import MisconfigurationException
+from lightning.pytorch.utilities.rank_zero import rank_zero_info
 
 
 class EMA(Callback):
