@@ -4,7 +4,7 @@ from torchvision.utils import save_image
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from models.fit import FiT_models
-from samplesupport import precompute_freqs_cis_2d, apply_2d_rotary_pos, resize_call, patchify
+from samplesupport import precompute_freqs_cis_2d, apply_2d_rotary_pos, resize_call, patchify , apply_rotary_pos_emb
 from lightning import LightningModule
 
 class FiTModule(LightningModule):
