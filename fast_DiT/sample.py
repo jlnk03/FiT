@@ -61,7 +61,10 @@ def main(args):
     y = torch.cat([y, y_null], 0)
     model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
 
+    
     # here start implementing changes reggarding FIT
+    
+    #getitem
 
     # Sample images:
     samples = diffusion.p_sample_loop(
