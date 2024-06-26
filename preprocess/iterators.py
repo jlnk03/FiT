@@ -2,7 +2,6 @@ import os
 import random
 from typing import Dict, List, Tuple
 
-import numpy as np
 import torch
 import torchvision
 from PIL import Image
@@ -20,22 +19,27 @@ class _ResizeByMaxValue:
 
     def __call__(self, img: Image.Image) -> Image.Image:
         w, h = img.size
+
         image_area = w * h
         max_area = self.max_size * self.max_size
+
         if image_area > max_area:
             ratio = max_area / image_area
-            new_w = w * np.sqrt(ratio)
-            new_h = h * np.sqrt(ratio)
+
+            new_w = w * torch.sqrt(torch.Tensor([ratio]))
+            new_h = h * torch.sqrt(torch.Tensor([ratio]))
         else:
             new_w = w
             new_h = h
 
-        round_w, round_h = (np.round(np.array([new_w, new_h]) / self.scale) * self.scale).astype(int).tolist()
+        round_w, round_h = (torch.round(torch.Tensor([new_w, new_h]) / self.scale) * self.scale).int().tolist()
         if round_w * round_h > max_area:
-            round_w, round_h = (np.floor(np.array([new_w, new_h]) / self.scale) * self.scale).astype(int).tolist()
+            round_w, round_h = (torch.floor(torch.array([new_w, new_h]) / self.scale) * self.scale).int().tolist()
 
         round_w, round_h = max(round_w, self.scale), max(round_h, self.scale)
+
         img = img.resize((round_w, round_h), resample=Image.BICUBIC)
+
         return img
 
 
@@ -51,7 +55,9 @@ class ImageNetWithPathIterator(Dataset):
 
         for dirpath, _, filenames in os.walk(root):
             for f in filenames:
+
                 _, ext = os.path.splitext(f)
+
                 if ext.lower() in ALLOWED_FORMAT:
                     fpath = os.path.join(dirpath, f)
                     images_info.append(fpath)
@@ -60,6 +66,7 @@ class ImageNetWithPathIterator(Dataset):
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         images_info = sorted(images_info)
+
         return images_info
 
     def __len__(self):
@@ -98,7 +105,9 @@ class ImageNetLatentIterator(Dataset):
 
         for dirpath, _, filenames in os.walk(root):
             for f in filenames:
+
                 _, ext = os.path.splitext(f)
+
                 if ext.lower() in ".npy":
                     fpath = os.path.join(dirpath, f)
                     latent_info.append(dict(path=fpath, label=os.path.basename(dirpath)))
@@ -107,63 +116,63 @@ class ImageNetLatentIterator(Dataset):
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         latent_info = sorted(latent_info, key=lambda x: x["path"])
+
         return latent_info
 
     def _create_label_mapping(self, latent_info: List[Dict[str, str]]):
         labels = set([x["label"] for x in latent_info])
         labels = sorted(list(labels))
-        labels = dict(zip(labels, np.arange(len(labels), dtype=np.int32)))
+        labels = dict(zip(labels, torch.arange(len(labels), dtype=torch.int)))
+
         return labels
 
     def __len__(self):
         return len(self.latent_info)
 
-    def _random_horiztotal_flip(self, latent: np.ndarray) -> np.ndarray:
+    def _random_horiztotal_flip(self, latent: torch.Tensor) -> torch.Tensor:
         if random.random() < 0.5:
             # perform a random horizontal flip in latent domain
             # mimic the effect of horizontal flip in image (not exactly identical)
             latent = latent[..., ::-1]
+
         return latent
 
-    def _patchify(self, latent: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _patchify(self, latent: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         c, h, w = latent.shape
         nh, nw = h // self.patch_size, w // self.patch_size
 
-        latent = np.reshape(latent, (c, nh, self.patch_size, nw, self.patch_size))
-        latent = np.transpose(latent, (1, 3, 2, 4, 0))  # nh, nw, patch, patch, c
-        latent = np.reshape(latent, (nh * nw, -1))  # nh * nw, patch * patch * c
+        latent = torch.reshape(latent, (c, nh, self.patch_size, nw, self.patch_size))
+        latent = torch.permute(latent, (1, 3, 2, 4, 0))  # nh, nw, patch, patch, c
+        latent = torch.reshape(latent, (nh * nw, -1))  # nh * nw, patch * patch * c
 
         if self.embed_method == "rotate":
-            pos = precompute_freqs_cis_2d(self.embed_dim, nh, nw).astype(np.float32)
+            pos = precompute_freqs_cis_2d(self.embed_dim, nh, nw).float()
         else:
-            pos = get_2d_sincos_pos_embed(self.embed_dim, nh, nw).astype(np.float32)
+            pos = get_2d_sincos_pos_embed(self.embed_dim, nh, nw).float()
+
         return latent, pos
 
     def __getitem__(self, idx):
         x = self.latent_info[idx]
 
-        latent = np.load(x["path"])
+        latent = torch.load(x["path"])
 
         height, width = latent.shape[1:]
 
         latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
-        mask = np.ones(latent.shape[0], dtype=np.bool_)
+        mask = torch.ones(latent.shape[0], dtype=torch.bool)
 
-        latent = torch.tensor(latent)
         latent = latent[torch.randperm(latent.shape[0])]
         latent = latent[:self.number_of_tokens]
         latent = torch.nn.functional.pad(latent, (
-            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.number_of_tokens - latent.shape[0]))
+            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0,
+            self.number_of_tokens - latent.shape[0]))
 
-        label = torch.tensor(label)
-
-        pos = torch.tensor(pos)
         pos = torch.nn.functional.pad(pos, (
             0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
 
-        mask = torch.tensor(mask)
         mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
 
         return latent, label, pos, mask, height, width
