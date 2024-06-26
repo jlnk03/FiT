@@ -23,7 +23,7 @@ def get_2d_sincos_pos_embed(embed_dim: int, nh: int, nw: Optional[int] = None) -
     grid_h = torch.arange(nh, dtype=torch.float)
     grid_w = torch.arange(nw, dtype=torch.float)
 
-    grid = torch.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = torch.meshgrid(grid_w, grid_h, indexing='xy')  # here w goes first
     grid = torch.stack(grid, dim=0)
 
     grid = grid.reshape([2, nh, nw])
@@ -69,7 +69,7 @@ def precompute_freqs_cis_2d(
     grid_h = torch.arange(nh, dtype=torch.float)
     grid_w = torch.arange(nw, dtype=torch.float)
 
-    grid = torch.meshgrid(grid_w, grid_h)  # here w goes first
+    grid = torch.meshgrid(grid_w, grid_h, indexing='xy')  # here w goes first
     grid = torch.stack(grid, dim=0)
 
     grid = grid.reshape([2, nh, nw])
@@ -104,7 +104,7 @@ def _get_1d_sincos_pos_embed_from_grid(embed_dim: int, pos: torch.Tensor) -> tor
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000 ** omega  # (D/2,)
 
-    out = torch.outer(pos, omega)  # (M, D/2), outer product
+    out = torch.outer(torch.flatten(pos), torch.flatten(omega))  # (M, D/2), outer product
 
     emb_sin = torch.sin(out)  # (M, D/2)
     emb_cos = torch.cos(out)  # (M, D/2)
@@ -134,7 +134,7 @@ def _precompute_freqs_cis_1d_from_grid(
         theta = theta * torch.power(s, dim / (dim - 2))
 
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float)[: (dim // 2)] / dim))
-    freqs = torch.outer(pos, freqs)
+    freqs = torch.outer(torch.flatten(pos), torch.flatten(freqs))
 
     a = torch.cos(freqs)
     b = torch.sin(freqs)  # represent for a + ib

@@ -10,7 +10,7 @@ from iterators import create_dataloader_imagenet_preprocessing
 config = dict()
 
 if __name__ == "__main__":
-    device = ("cuda" if torch.cuda.is_available() else "cpu")
+    device = ("cuda" if torch.cuda.is_available() else "mps")
 
     save_dir = config.get("latent_folder", '../latent')
     os.makedirs(save_dir, exist_ok=True)

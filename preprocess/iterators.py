@@ -34,7 +34,7 @@ class _ResizeByMaxValue:
 
         round_w, round_h = (torch.round(torch.Tensor([new_w, new_h]) / self.scale) * self.scale).int().tolist()
         if round_w * round_h > max_area:
-            round_w, round_h = (torch.floor(torch.array([new_w, new_h]) / self.scale) * self.scale).int().tolist()
+            round_w, round_h = (torch.floor(torch.Tensor([new_w, new_h]) / self.scale) * self.scale).int().tolist()
 
         round_w, round_h = max(round_w, self.scale), max(round_h, self.scale)
 
@@ -108,7 +108,7 @@ class ImageNetLatentIterator(Dataset):
 
                 _, ext = os.path.splitext(f)
 
-                if ext.lower() in ".npy":
+                if ext.lower() in ".pt":
                     fpath = os.path.join(dirpath, f)
                     latent_info.append(dict(path=fpath, label=os.path.basename(dirpath)))
 
@@ -159,7 +159,7 @@ class ImageNetLatentIterator(Dataset):
 
         height, width = latent.shape[1:]
 
-        latent = self._random_horiztotal_flip(latent)
+        #latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
         mask = torch.ones(latent.shape[0], dtype=torch.bool)
