@@ -1,15 +1,13 @@
 import json
 import os
 
-import numpy as np
 import torch
 from diffusers import AutoencoderKL
 from tqdm import tqdm
 
-from iterators import create_dataloader_imagenet_preprocessing, create_dataloader_imagenet_latent
+from iterators import create_dataloader_imagenet_preprocessing
 
 config = dict()
-
 
 if __name__ == "__main__":
     device = ("cuda" if torch.cuda.is_available() else "cpu")
@@ -18,7 +16,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     # 2 vae
-    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_safetensors=True).to(device)
+    vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-ema").to(device)
 
     # 3. build dataloader
     dataloader = create_dataloader_imagenet_preprocessing(config)
@@ -33,7 +31,7 @@ if __name__ == "__main__":
         if not os.path.isdir(outdir):
             os.makedirs(outdir)
 
-        dest = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".npy")
+        dest = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".pt")
 
         if os.path.isfile(dest):
             continue
@@ -41,11 +39,13 @@ if __name__ == "__main__":
         with torch.no_grad():
             enc = vae.encode(img.to(device)).latent_dist.sample() * 0.18215
 
-        latent = enc.detach().cpu().numpy().astype(np.float16)[0]
+        latent = enc.detach().cpu()[0]
 
-        np.save(dest, latent)
+        torch.save(latent, dest)
+
         records.append(dict(img=path, latent=dest))
 
     out_json = os.path.join(save_dir, "path.json")
+
     with open(out_json, "w") as f:
         json.dump(records, f, indent=4)
