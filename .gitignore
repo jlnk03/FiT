@@ -10,3 +10,6 @@ __pycache__
 .idea
 .vscode
 .trunk
+
+wandb/
+lightning_logs/

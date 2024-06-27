@@ -46,12 +46,12 @@ class FiTModule(L.LightningModule):
 
         self.save_hyperparameters()
 
-    def forward(self, x, y, pos, mask, h, w, t):
-        return self.model(x, t=t, y=y, pos=pos, mask=mask, h=h, w=w)
+    def forward(self, x, y, pos, mask, t):
+        return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
         #

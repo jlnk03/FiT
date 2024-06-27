@@ -172,6 +172,8 @@ class ImageNetLatentIterator(Dataset):
 
         mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
 
+        print(latent.shape, pos.shape, mask.shape, height, width)
+
         return latent, label, pos, mask, height, width
 
 
