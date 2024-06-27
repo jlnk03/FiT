@@ -20,6 +20,8 @@ from preprocess.iterators import ImageNetLatentIterator
 #                                  PyTorch Lightning Module                     #
 #################################################################################
 
+torch.set_float32_matmul_precision('high')
+
 class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()

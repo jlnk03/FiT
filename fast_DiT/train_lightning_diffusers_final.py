@@ -44,25 +44,39 @@ class FiTModule(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
-        loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
-        loss = loss_dict["loss"].mean()
 
-        # Logging
+        t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
+
+        noise = torch.randn(latent.shape, device=self.device)
+
+        x_t = self.noise_scheduler.add_noise(latent, noise, t)
+
+        model_output = self.model(x_t, t=t, **model_kwargs)
+
+        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
-    
+
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
-        loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
-        val_loss = loss_dict["loss"].mean()
-        
-        # Logging
-        self.log("val_loss", val_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return val_loss
+
+        t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
+
+        noise = torch.randn(latent.shape, device=self.device)
+
+        x_t = self.noise_scheduler.add_noise(latent, noise, t)
+
+        model_output = self.model(x_t, t=t, **model_kwargs)
+
+        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
+        self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        return loss
     
     def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
             # Setup PyTorch:
@@ -118,15 +132,6 @@ class FiTModule(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
         return optimizer
-
-    # @torch.no_grad()
-    # def update_ema(self, ema_model, model, decay=0.9999):
-    #     ema_params = OrderedDict(ema_model.named_parameters())
-    #     model_params = OrderedDict(model.named_parameters())
-
-    #     for name, param in model_params.items():
-    #         name = name.replace("module.", "")
-    #         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
 
     def train_dataloader(self):
         dataset = ImageNetLatentIterator({
