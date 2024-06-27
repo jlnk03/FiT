@@ -8,7 +8,7 @@ import torchvision
 from PIL import Image
 from torch.utils.data import Dataset
 
-from masking.pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
+from preprocess_old.pos_embed import get_2d_sincos_pos_embed, precompute_freqs_cis_2d
 
 ALLOWED_FORMAT = {".jpeg", ".jpg", ".bmp", ".png"}
 
