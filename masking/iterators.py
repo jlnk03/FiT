@@ -159,13 +159,16 @@ class ImageNetLatentIterator(Dataset):
 
         height, width = latent.shape[1:]
 
-        # latent = self._random_horiztotal_flip(latent)
+        #latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
         mask = torch.ones(latent.shape[0], dtype=torch.bool)
 
+        latent = latent[torch.randperm(latent.shape[0])]
+        latent = latent[:self.number_of_tokens]
         latent = torch.nn.functional.pad(latent, (
-            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.max_length - latent.shape[0]))
+            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0,
+            self.number_of_tokens - latent.shape[0]))
 
         pos = torch.nn.functional.pad(pos, (
             0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
