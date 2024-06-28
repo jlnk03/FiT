@@ -31,8 +31,7 @@ class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        # self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
-        self.model = FiT_models[args.model]()
+        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
 
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
