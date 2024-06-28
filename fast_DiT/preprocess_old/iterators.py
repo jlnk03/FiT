@@ -163,8 +163,6 @@ class ImageNetLatentIterator(Dataset):
 
         label = torch.tensor(label)
 
-        print(latent.shape, pos.shape, mask.shape, h, w)
-
         return latent, label, pos, mask, h, w
 
 

@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from copy import deepcopy
 from collections import OrderedDict
 from diffusers import DDIMScheduler
-import torch.functional as F
+import torch.nn.functional as F
 from lightning.pytorch.profilers import AdvancedProfiler
 from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
@@ -31,7 +31,8 @@ class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        # self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        self.model = FiT_models[args.model]()
 
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
@@ -62,7 +63,7 @@ class FiTModule(L.LightningModule):
         masked_model_output = model_output[mask]
         masked_target = noise[mask]
 
-        loss = F.mse_loss(masked_model_output, masked_target, reduction='none').mean(dim=list(range(1, len(masked_model_output.shape))))
+        loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
@@ -88,7 +89,7 @@ class FiTModule(L.LightningModule):
         masked_model_output = model_output[mask]
         masked_target = noise[mask]
 
-        loss = F.mse_loss(masked_model_output, masked_target, reduction='none').mean(dim=list(range(1, len(masked_model_output.shape))))
+        loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
@@ -198,7 +199,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training_new", project="FiT")
+    wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT")
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
