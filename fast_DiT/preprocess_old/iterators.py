@@ -79,7 +79,7 @@ class ImageNetWithPathIterator(Dataset):
 
 class ImageNetLatentIterator(Dataset):
     def __init__(self, config) -> None:
-        self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent_two'))
+        self.latent_info = self._inspect_latent(config.get("latent_folder", '../latent'))
         self.label_mapping = self._create_label_mapping(self.latent_info)
 
         self.sample_size = config.get("sample_size", 256)

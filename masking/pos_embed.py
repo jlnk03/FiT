@@ -130,7 +130,7 @@ def _precompute_freqs_cis_1d_from_grid(
 ) -> torch.Tensor:
     if max_length is not None:
         # VisionNTK
-        s = max((torch.max(pos) / torch.sqrt(torch.Tensor(max_length))).item(), 1.0)
+        s = max((torch.max(pos) / torch.sqrt(torch.Tensor([max_length]))).item(), 1.0)
         theta = theta * torch.power(s, dim / (dim - 2))
 
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float)[: (dim // 2)] / dim))

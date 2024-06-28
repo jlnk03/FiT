@@ -26,8 +26,8 @@ class _ResizeByMaxValue:
         if image_area > max_area:
             ratio = max_area / image_area
 
-            new_w = w * torch.sqrt(torch.Tensor(ratio)).item()
-            new_h = h * torch.sqrt(torch.Tensor(ratio)).item()
+            new_w = w * torch.sqrt(torch.Tensor([ratio])).item()
+            new_h = h * torch.sqrt(torch.Tensor([ratio])).item()
         else:
             new_w = w
             new_h = h
