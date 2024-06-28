@@ -35,17 +35,17 @@ class FiTModule(L.LightningModule):
         self.diffusion = create_diffusion(timestep_respacing="")
         self.automatic_optimization = True
 
-        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        # self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
 
         self.save_hyperparameters()
 
-    def forward(self, x, y, pos, mask, h, w, t):
-        return self.model(x, t=t, y=y, pos=pos, mask=mask, h=h, w=w)
+    def forward(self, x, y, pos, mask, t):
+        return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
         t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
         loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
         loss = loss_dict["loss"].mean()
 
@@ -56,7 +56,7 @@ class FiTModule(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
         t = torch.randint(0, self.diffusion.num_timesteps, (latent.shape[0],), device=self.device)
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
         loss_dict = self.diffusion.training_losses(self.model, latent, t, model_kwargs)
         val_loss = loss_dict["loss"].mean()
         
@@ -119,15 +119,6 @@ class FiTModule(L.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
         return optimizer
 
-    # @torch.no_grad()
-    # def update_ema(self, ema_model, model, decay=0.9999):
-    #     ema_params = OrderedDict(ema_model.named_parameters())
-    #     model_params = OrderedDict(model.named_parameters())
-
-    #     for name, param in model_params.items():
-    #         name = name.replace("module.", "")
-    #         ema_params[name].mul_(decay).add_(param.data, alpha=1 - decay)
-
     def train_dataloader(self):
         dataset = ImageNetLatentIterator({
             "latent_folder": self.args.feature_path,
@@ -178,7 +169,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training_new", project="FiT")
+    # wandb_logger = WandbLogger(name="FiT_Training_new", project="FiT")
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
@@ -192,7 +183,7 @@ def main(args):
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        logger=wandb_logger,
+        # logger=wandb_logger,
         callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
         accumulate_grad_batches=2,

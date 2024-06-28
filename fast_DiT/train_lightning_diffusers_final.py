@@ -8,13 +8,13 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from models.fit import FiT_models
-from preprocess.iterators import ImageNetLatentIterator
+from preprocess_old.iterators import ImageNetLatentIterator
 import lightning as L
 from torch.utils.data import DataLoader
 from copy import deepcopy
 from collections import OrderedDict
 from diffusers import DDIMScheduler
-import torch.functional as F
+import torch.nn.functional as F
 from lightning.pytorch.profilers import AdvancedProfiler
 from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
@@ -31,20 +31,19 @@ class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.model = FiT_models[args.model]()
-        self.diffusion = create_diffusion(timestep_respacing="")
-        self.automatic_optimization = True
-
         self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+
+        self.automatic_optimization = True
+        self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
 
         self.save_hyperparameters()
 
-    def forward(self, x, y, pos, mask, h, w, t):
-        return self.model(x, t=t, y=y, pos=pos, mask=mask, h=h, w=w)
+    def forward(self, x, y, pos, mask, t):
+        return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
 
@@ -54,15 +53,23 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
-                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+        # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+        #         / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
+        assert model_output.shape == noise.shape
+
+        # Apply the mask to the model output and the target
+        masked_model_output = model_output[mask]
+        masked_target = noise[mask]
+
+        loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask, h, w = batch
-        model_kwargs = {'y': label, 'pos': pos, 'mask': mask, 'h': h, 'w': w}
+        model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
 
@@ -72,8 +79,16 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
-                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+        # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+        #         / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
+        assert model_output.shape == noise.shape
+
+        # Apply the mask to the model output and the target
+        masked_model_output = model_output[mask]
+        masked_target = noise[mask]
+
+        loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
@@ -183,7 +198,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training_new", project="FiT")
+    wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT")
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
