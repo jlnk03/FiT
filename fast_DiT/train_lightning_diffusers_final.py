@@ -8,7 +8,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from models.fit import FiT_models
-from preprocess.iterators import ImageNetLatentIterator
+from preprocess_old.iterators import ImageNetLatentIterator
 import lightning as L
 from torch.utils.data import DataLoader
 from copy import deepcopy
@@ -53,8 +53,16 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
-                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+        # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+        #         / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
+        assert model_output.shape == noise.shape
+
+        # Apply the mask to the model output and the target
+        masked_model_output = model_output[mask]
+        masked_target = noise[mask]
+
+        loss = F.mse_loss(masked_model_output, masked_target, reduction='none').mean(dim=list(range(1, len(masked_model_output.shape))))
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
@@ -71,8 +79,16 @@ class FiTModule(L.LightningModule):
 
         model_output = self.model(x_t, t=t, **model_kwargs)
 
-        loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
-                / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+        # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
+        #         / torch.clamp(torch.sum(mask, dim=1), min=1)).mean()
+
+        assert model_output.shape == noise.shape
+
+        # Apply the mask to the model output and the target
+        masked_model_output = model_output[mask]
+        masked_target = noise[mask]
+
+        loss = F.mse_loss(masked_model_output, masked_target, reduction='none').mean(dim=list(range(1, len(masked_model_output.shape))))
 
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
