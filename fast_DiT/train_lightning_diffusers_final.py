@@ -198,12 +198,13 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT")
+    wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT", resume="allow", id=args.wandb_run_id)
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
         save_top_k=-1,  # Save all models
-        every_n_train_steps=args.ckpt_every
+        # every_n_train_steps=args.ckpt_every
+        every_n_epochs=1
     )
 
     ema_callback = EMA(decay=0.9999)
@@ -217,10 +218,10 @@ def main(args):
         precision='bf16-mixed',
         accumulate_grad_batches=2,
         profiler=profiler,
-        log_every_n_steps=args.log_every
+        log_every_n_steps=args.log_every,
     )
     
-    trainer.fit(model)
+    trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -237,5 +238,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=10_000)
+    parser.add_argument("--resume-from-checkpoint", type=str, default=None)
+    parser.add_argument("--wandb-run-id", type=str, default=None)
     args = parser.parse_args()
     main(args)
