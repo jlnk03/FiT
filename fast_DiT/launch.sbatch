@@ -10,5 +10,5 @@
 
 echo "Starting the job"
 echo "Job ID: $SLURM_JOB_ID"
-srun python train_lightning_diffusers_final.py  --model FiT-B/2 --global-batch-size 128 --epochs 100 --feature-path /storage/slurm/schnaus/gsu_2024/latentnew_train --feature-val-path /storage/slurm/schnaus/gsu_2024/latentnew_val --results-dir /storage/slurm/schaus/gsu_2024/results --ckpt-every 10_000 --log-every 10
+srun python train_lightning_diffusers_final.py  --model FiT-B/2 --global-batch-size 128 --epochs 100 --feature-path /storage/slurm/schnaus/gsu_2024/latentnew_train --feature-val-path /storage/slurm/schnaus/gsu_2024/latentnew_val --results-dir /storage/slurm/schnaus/gsu_2024/results --ckpt-every 10_000 --log-every 10
 echo "Job finished"
