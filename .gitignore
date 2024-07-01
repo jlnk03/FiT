@@ -16,3 +16,5 @@ lightning_logs/
 slurm/
 
 results/
+
+output/

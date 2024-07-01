@@ -146,6 +146,9 @@ def complex_mult(x: Tensor, y: Tensor) -> Tensor:
     a, b = x[..., 0], x[..., 1]
     c, d = y[..., 0], y[..., 1]
 
+    # print(f'x device: {x.device}')
+    # print(f'y device: {y.device}')
+
     # (a + ib)(c + id) = (ac - bd) + i(bc + ad)
     real_part = a * c - b * d
     imag_part = b * c + a * d
@@ -480,6 +483,13 @@ class FiT(nn.Module):
         w: width of the input image latent
         """
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
+        # pos.to(x.device)
+        # mask.to(x.device)
+        # print(f'x device train: {x.device}')
+        # print(f't device train: {t.device}')
+        # print(f'y device train: {y.device}')
+        # print(f'pos device train: {pos.device}')
+        # print(f'mask device train: {mask.device}')
         if not train:
             _, _, h, w = x.shape
             x = self.patchify(x)

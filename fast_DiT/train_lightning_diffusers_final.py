@@ -20,7 +20,7 @@ from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
 from torchvision.utils import save_image
 from ema import EMA
-from preprocess.pos_embed import precompute_freqs_cis_2d
+from preprocess_old.pos_embed import precompute_freqs_cis_2d
 from diffusion.gaussian_diffusion import GaussianDiffusion
 
 #################################################################################
@@ -137,6 +137,8 @@ class FiTModule(L.LightningModule):
         # else:
         #     pos_embed_fill = get_2d_sincos_pos_embed(embed_dim, nh, nw)
 
+        pos_embed_fill = torch.tensor(pos_embed_fill, device=self.device, dtype=torch.float32)
+
         if pos_embed_fill.shape[0] > max_length:
             pos_embed = pos_embed_fill
         else:
@@ -193,7 +195,7 @@ class FiTModule(L.LightningModule):
             model_kwargs = dict(y=y, pos=pos, mask=mask, cfg_scale=15)
 
             #TODO: infer pipeline
-            latents = diffusion.sampling_func(
+            latents = diffusion.ddim_sample_loop(
                 model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=self.device
             )
 
@@ -289,7 +291,7 @@ if __name__ == "__main__":
     parser.add_argument("--feature-path", type=str, default="features")
     parser.add_argument("--feature-val-path", type=str, default="features_val")
     parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
+    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-B/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1400)

@@ -1,25 +1,81 @@
-from train_lightning_diffusers_final import FiTModule
-from models.fit import FiT_models
+import torch
 import argparse
-from lightning import seed_everything, Trainer
+from lightning import Trainer
+from diffusion import create_diffusion
+from diffusers.models import AutoencoderKL
+from diffusers import DDIMScheduler
+from train_lightning_diffusers_final import FiTModule
+from torchvision.utils import save_image
 
 def main(args):
-    seed_everything(args.global_seed)
+    # Load the model
+    model = FiTModule.load_from_checkpoint(args.checkpoint_path)
+    model.eval()
+
+    print("Model loaded successfully")
+    print(model.device)
+
+    # Set up the diffusion process
+    diffusion = create_diffusion(str(args.num_sampling_steps))
     
-    model = FiTModule(args)
-    trainer = Trainer()
-    trainer.predict(model)
+    # Load the VAE
+    vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(model.device)
+
+    # Set up the noise scheduler
+    noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
+
+    # Generate random noise
+    latent_height, latent_width = args.image_height // 8, args.image_width // 8
+    class_labels = torch.Tensor([125, 120, 260, 248, 270, 280]).int().to(model.device)
+    num_samples = len(class_labels)
+    z = torch.randn(num_samples, 4, latent_height, latent_width, device=model.device)
+
+    # Set up class labels (modify as needed)
+    # class_labels = torch.randint(0, args.num_classes, (args.num_samples,), device=model.device)
+
+    # Set up position embeddings and mask
+    pos, valid_t = model._create_pos_embed(latent_height, latent_width, 2, 256, 64, "rotate")
+    mask = model._create_mask(valid_t, 256, num_samples)
+
+    pos = torch.Tensor(pos).to(model.device)
+    mask = torch.Tensor(mask).to(model.device)
+
+    print("Starting sampling")
+
+    # Set up model kwargs
+    model_kwargs = dict(y=class_labels, pos=pos, mask=mask, cfg_scale=args.cfg_scale)
+
+    # Run the diffusion sampling
+    samples = diffusion.ddim_sample_loop(
+        model.model.forward_with_cfg,
+        z.shape,
+        z,
+        clip_denoised=False,
+        model_kwargs=model_kwargs,
+        progress=True,
+        device=model.device
+    )
+
+    # Decode the latents using the VAE
+    with torch.no_grad():
+        images = vae.decode(samples / 0.18215).sample
+
+    print(f'images shape: {images.shape}')
+    # Save the generated images
+    for i, image in enumerate(images):
+        # torch.save(image, f'generated_image_{i}.pt')
+        print(f'generated_image_{i}.png')
+        save_image(image, f'output/generated_image_{i}.png')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--results-dir", type=str, default="results")
-    parser.add_argument("--model", type=str, choices=list(FiT_models.keys()), default="FiT-XL/2")
-    parser.add_argument("--image-size", type=int, choices=[256, 512], default=256)
-    parser.add_argument("--image-height", type=int, default=256)
-    parser.add_argument("--image-width", type=int, default=256)
-    parser.add_argument("--global-seed", type=int, default=0)
-    parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")
-    parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--ckpt", type=str, required=True, help="Path to the FiT model checkpoint.")
+    parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to the model checkpoint")
+    parser.add_argument("--num_samples", type=int, default=4, help="Number of images to generate")
+    parser.add_argument("--num_sampling_steps", type=int, default=250, help="Number of sampling steps")
+    parser.add_argument("--image_height", type=int, default=256, help="Height of the generated image")
+    parser.add_argument("--image_width", type=int, default=256, help="Width of the generated image")
+    parser.add_argument("--num_classes", type=int, default=1000, help="Number of classes in the model")
+    parser.add_argument("--vae", type=str, default="ema", choices=["ema", "mse"], help="Type of VAE to use")
+    parser.add_argument("--cfg_scale", type=float, default=15.0, help="Classifier-free guidance scale")
     args = parser.parse_args()
     main(args)
