@@ -20,6 +20,8 @@ from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
 from torchvision.utils import save_image
 from ema import EMA
+from preprocess.pos_embed import precompute_freqs_cis_2d
+from diffusion.gaussian_diffusion import GaussianDiffusion
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -93,52 +95,111 @@ class FiTModule(L.LightningModule):
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
     
-    def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
-            # Setup PyTorch:
-            torch.manual_seed(args.seed)
-            torch.set_grad_enabled(False)
-            device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            if args.ckpt is None:
-                assert args.model == "DiT-XL/2", "Only DiT-XL/2 models are available for auto-download."
-                assert args.image_size in [256, 512]
-                assert args.num_classes == 1000
+    def _patchify(self, x: torch.Tensor, p: int) -> torch.Tensor:
+        # N, C, H, W -> N, T, D
+        n, c, h, w = x.shape
+        nh, nw = h // p, w // p
+        x = x.view(n, c, nh, p, nw, p)
+        x = x.permute(0, 2, 4, 3, 5, 1).contiguous()
+        x = x.view(n, nh * nw, p * p * c)
+        return x
+
+    def _unpatchify(self, x: torch.Tensor, nh: int, nw: int, p: int, c: int) -> torch.Tensor:
+        # N, T, D -> N, C, H, W
+        n, _, _ = x.shape
+        x = x.view(n, nh, nw, p, p, c)
+        x = x.permute(0, 5, 1, 3, 2, 4).contiguous()
+        x = x.view(n, c, nh * p, nw * p)
+        return x
+
+    def _pad_latent(self, x: torch.Tensor, p: int, max_size: int, max_length: int) -> torch.Tensor:
+        # N, C, H, W -> N, C, max_size, max_size
+        n, c, _, _ = x.shape
+        nh, nw = max_size // p, max_size // p
+
+        x_fill = self._patchify(x, p)
+        if x_fill.shape[1] > max_length:
+            return x
+        x_padded = torch.zeros((n, max_length, p * p * c), dtype=x.dtype, device=x.device)
+        x_padded[:, : x_fill.shape[1]] = x_fill
+        x_padded = self._unpatchify(x_padded, nh, nw, p, c)
+        return x_padded
+    
+
+    def _create_pos_embed(
+        self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
+    ) -> Tuple[torch.Tensor, int]:
+        # 1, T, D
+        nh, nw = h // p, w // p
+        # if method == "rotate":
+        pos_embed_fill = precompute_freqs_cis_2d(embed_dim, nh, nw, max_length=max_length)
+        # else:
+        #     pos_embed_fill = get_2d_sincos_pos_embed(embed_dim, nh, nw)
+
+        if pos_embed_fill.shape[0] > max_length:
+            pos_embed = pos_embed_fill
+        else:
+            pos_embed = torch.zeros((max_length, embed_dim), dtype=torch.float32)
+            pos_embed[: pos_embed_fill.shape[0]] = pos_embed_fill
+
+        pos_embed = pos_embed[None, ...]
+        pos_embed = torch.tensor(pos_embed)
+        return pos_embed, pos_embed_fill.shape[0]
+    
+
+    def _create_mask(self, valid_t: int, max_length: int, n: int) -> torch.Tensor:
+        # 1, T
+        if valid_t > max_length:
+            mask = torch.ones((valid_t,), dtype=torch.bool)
+        else:
+            mask = torch.zeros((max_length,), dtype=torch.bool)
+            mask[:valid_t] = True
+        mask = mask.unsqueeze(0).repeat(n, 1)
+        return mask
+
+    
+    def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
 
             # Load model:
             latent_size = args.image_size // 8
-            FiT_model = FiT_models[args.model](
-                input_size=latent_size,
-                num_classes=args.num_classes
-            ).to(device)
-            # load a custom FiT checkpoint from train.py:
-            # ckpt_path = args.ckpt or f"FiT-B-2.pt"
-            # state_dict = find_model(ckpt_path)
-            # model.load_state_dict(state_dict)
-            model = FiT_model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
-            model.eval()  # important!
+            latent_height, latent_width = args.image_height // 8, args.image_width // 8
+            model = self.model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
             diffusion = create_diffusion(str(args.num_sampling_steps))
-            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(device)
+            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(self.device)
 
             # Labels to condition the model with (feel free to change):
-            class_labels = [207]
+            class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
 
             # Create sampling noise:
             n = len(class_labels)
-            z = torch.randn(n, 4, latent_size, latent_size, device=device)
-            y = torch.tensor(class_labels, device=device)
+            z = torch.randn(n, 4, latent_height, latent_width, device=self.device)
+            y = torch.tensor(class_labels, device=self.device)
+            y_null = torch.ones_like(y) * 1000
 
-            # Setup classifier-free guidance:
-            z = torch.cat([z, z], 0)
-            y_null = torch.tensor([1000] * n, device=device)
             y = torch.cat([y, y_null], 0)
-            # TODO: add mask and pos
-            model_kwargs = dict(y=y, cfg_scale=args.cfg_scale)
+            z = torch.cat([z, z], 0)
 
-            # Sample images:
-            samples = diffusion.p_sample_loop(
-                model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+            p = 2
+            max_size = 32
+            max_length = 256
+
+            ### mindspore infer pipeline
+            n, _, h, w = z.shape
+            z = self._pad_latent(z, p, max_size, max_length)
+            pos, valid_t = self._create_pos_embed(h, w, p, max_length, 64, "rotate")
+            mask = self._create_mask(valid_t, max_length, n)
+
+            model_kwargs = dict(y=y, pos=pos, mask=mask, cfg_scale=15)
+
+            #TODO: infer pipeline
+            latents = diffusion.sampling_func(
+                model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=self.device
             )
-            samples, _ = samples.chunk(2, dim=0)  # Remove null class samples
+
+            samples, _ = latents.chunk(2, dim=0)  # Remove null class samples
+            samples = self._unpad_latent(samples, valid_t, h, w, p)
+            
             samples = vae.decode(samples / 0.18215).sample
 
             # Save and display images:
