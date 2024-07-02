@@ -29,13 +29,19 @@ def main(args):
     class_labels = torch.Tensor([125, 120, 260, 248, 270, 280]).int().to(model.device)
     num_samples = len(class_labels)
     z = torch.randn(num_samples, 4, latent_height, latent_width, device=model.device)
+    y = class_labels
+    y_null = torch.ones_like(y) * 1000
 
-    # Set up class labels (modify as needed)
-    # class_labels = torch.randint(0, args.num_classes, (args.num_samples,), device=model.device)
+    # Prepare the data
+    y_tot = torch.cat([y, y_null], dim=0)
+    x_in = torch.cat([z] * 2, dim=0)
+
+    n, _, h, w = x_in.shape
 
     # Set up position embeddings and mask
-    pos, valid_t = model._create_pos_embed(latent_height, latent_width, 2, 256, 64, "rotate")
-    mask = model._create_mask(valid_t, 256, num_samples)
+    z = model._pad_latent(x_in, 2, 32, 256)
+    pos, valid_t = model._create_pos_embed(h, w, 2, 256, 64, "rotate")
+    mask = model._create_mask(valid_t, 256, n)
 
     pos = torch.Tensor(pos).to(model.device)
     mask = torch.Tensor(mask).to(model.device)
@@ -43,7 +49,7 @@ def main(args):
     print("Starting sampling")
 
     # Set up model kwargs
-    model_kwargs = dict(y=class_labels, pos=pos, mask=mask, cfg_scale=args.cfg_scale)
+    model_kwargs = dict(y=y_tot, pos=pos, mask=mask, cfg_scale=args.cfg_scale)
 
     # Run the diffusion sampling
     samples = diffusion.ddim_sample_loop(
@@ -55,6 +61,10 @@ def main(args):
         progress=True,
         device=model.device
     )
+
+    samples, _ = samples.chunk(2, axis=0)
+
+    samples = model._unpad_latent(samples, valid_t, h, w, 2)
 
     # Decode the latents using the VAE
     with torch.no_grad():

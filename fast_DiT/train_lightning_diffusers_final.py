@@ -127,6 +127,16 @@ class FiTModule(L.LightningModule):
         return x_padded
     
 
+    def _unpad_latent(self, x: Tensor, valid_t: int, h: int, w: int, p: int) -> Tensor:
+        # N, C, max_size, max_size -> N, C, H, W
+        _, c, _, _ = x.shape
+        nh, nw = h // p, w // p
+        x = self._patchify(x, p)
+        x = x[:, :valid_t]
+        x = self._unpatchify(x, nh, nw, p, c)
+        return x
+    
+
     def _create_pos_embed(
         self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
     ) -> Tuple[torch.Tensor, int]:
@@ -160,7 +170,7 @@ class FiTModule(L.LightningModule):
         mask = mask.unsqueeze(0).repeat(n, 1)
         return mask
 
-    
+
     def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
 
             # Load model:
