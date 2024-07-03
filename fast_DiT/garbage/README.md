@@ -11,7 +11,7 @@ It contains:
 * 🪐 An improved PyTorch [implementation](models.py) and the original [implementation](train_options/models_original.py) of DiT
 * ⚡️ Pre-trained class-conditional DiT models trained on ImageNet (512x512 and 256x256)
 * 💥 A self-contained [Hugging Face Space](https://huggingface.co/spaces/wpeebles/DiT) and [Colab notebook](http://colab.research.google.com/github/facebookresearch/DiT/blob/main/run_DiT.ipynb) for running pre-trained DiT-XL/2 models
-* 🛸 An improved DiT [training script](train.py) and several [training options](train_options)
+* 🛸 An improved DiT [training script](../train.py) and several [training options](train_options)
 
 ## Setup
 
@@ -22,7 +22,7 @@ git clone https://github.com/chuanyangjin/fast-DiT.git
 cd DiT
 ```
 
-We provide an [`environment.yml`](environment.yml) file that can be used to create a Conda environment. If you only want 
+We provide an [`environment.yml`](../environment.yml) file that can be used to create a Conda environment. If you only want 
 to run pre-trained models locally on CPU, you can remove the `cudatoolkit` and `pytorch-cuda` requirements from the file.
 
 ```bash
@@ -34,7 +34,7 @@ conda activate DiT
 ## Sampling [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/wpeebles/DiT) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](http://colab.research.google.com/github/facebookresearch/DiT/blob/main/run_DiT.ipynb)
 ![More DiT samples](visuals/sample_grid_1.png)
 
-**Pre-trained DiT checkpoints.** You can sample from our pre-trained DiT models with [`sample.py`](sample.py). Weights for our pre-trained DiT model will be 
+**Pre-trained DiT checkpoints.** You can sample from our pre-trained DiT models with [`sample.py`](../sample.py). Weights for our pre-trained DiT model will be 
 automatically downloaded depending on the model you use. The script has various arguments to switch between the 256x256
 and 512x512 models, adjust sampling steps, change the classifier-free guidance scale, etc. For example, to sample from
 our 512x512 DiT-XL/2 model, you can use:
@@ -51,7 +51,7 @@ For convenience, our pre-trained DiT models can be downloaded directly here as w
 | [XL/2](https://dl.fbaipublicfiles.com/DiT/models/DiT-XL-2-512x512.pt) | 512x512          | 3.04    | 240.82          | 525    |
 
 
-**Custom DiT checkpoints.** If you've trained a new DiT model with [`train.py`](train.py) (see [below](#training-dit)), you can add the `--ckpt`
+**Custom DiT checkpoints.** If you've trained a new DiT model with [`train.py`](../train.py) (see [below](#training-dit)), you can add the `--ckpt`
 argument to use your own checkpoint instead. For example, to sample from the EMA weights of a custom 
 256x256 DiT-L/4 model, run:
 
@@ -69,7 +69,7 @@ torchrun --nnodes=1 --nproc_per_node=1 extract_features.py --model DiT-XL/2 --da
 ```
 
 ### Training DiT
-We provide a training script for DiT in [`train.py`](train.py). This script can be used to train class-conditional 
+We provide a training script for DiT in [`train.py`](../train.py). This script can be used to train class-conditional 
 DiT models, but it can be easily modified to support other types of conditioning. 
 
 To launch DiT-XL/2 (256x256) training with `1` GPUs on one node:
@@ -115,7 +115,7 @@ In comparison to the original implementation, we implement a selection of traini
 
 ## Evaluation (FID, Inception Score, etc.)
 
-We include a [`sample_ddp.py`](sample_ddp.py) script which samples a large number of images from a DiT model in parallel. This script 
+We include a [`sample_ddp.py`](../sample_ddp.py) script which samples a large number of images from a DiT model in parallel. This script 
 generates a folder of samples as well as a `.npz` file which can be directly used with [ADM's TensorFlow
 evaluation suite](https://github.com/openai/guided-diffusion/tree/main/evaluations) to compute FID, Inception Score and
 other metrics. For example, to sample 50K images from our pre-trained DiT-XL/2 model over `N` GPUs, run:
@@ -124,4 +124,4 @@ other metrics. For example, to sample 50K images from our pre-trained DiT-XL/2 m
 torchrun --nnodes=1 --nproc_per_node=N sample_ddp.py --model DiT-XL/2 --num-fid-samples 50000
 ```
 
-There are several additional options; see [`sample_ddp.py`](sample_ddp.py) for details.
+There are several additional options; see [`sample_ddp.py`](../sample_ddp.py) for details.
