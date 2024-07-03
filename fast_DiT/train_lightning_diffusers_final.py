@@ -257,7 +257,8 @@ class FiTModule(L.LightningModule):
             shuffle=False,
             num_workers=self.args.num_workers,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
+            collate_fn=dataset.collate
         )
         return loader
 

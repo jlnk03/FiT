@@ -138,32 +138,46 @@ class ImageNetLatentIterator(Dataset):
             pos = get_2d_sincos_pos_embed(self.embed_dim, nh, nw).astype(np.float32)
         return latent, pos
 
+    def subsample(self, latent, label, pos, mask, number_of_tokens):
+        if latent.shape[0] > number_of_tokens:
+            permutation = torch.randperm(latent.shape[0])
+
+            latent = latent[permutation, :][:number_of_tokens, :]
+            pos = pos[permutation, :][:number_of_tokens, :]
+            mask = mask[permutation][:number_of_tokens]
+        else:
+            latent = torch.nn.functional.pad(latent, (
+            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, number_of_tokens - latent.shape[0]))
+            pos = torch.nn.functional.pad(pos, (0, self.embed_dim - pos.shape[1], 0, number_of_tokens - pos.shape[0]))
+            mask = torch.nn.functional.pad(mask, (0, number_of_tokens - mask.shape[0]))
+
+        return latent, label, pos, mask
+
+    def collate(self, batch):
+        number_of_tokens = random.randint(1, self.max_length)
+
+        concatenate = [self.subsample(latent, label, pos, mask, number_of_tokens) for latent, label, pos, mask in batch]
+
+        latent, label, pos, mask = zip(*concatenate)
+
+        latent = torch.concatenate(latent, dim=0)
+        label = torch.concatenate(label, dim=0)
+        pos = torch.concatenate(pos, dim=0)
+        mask = torch.concatenate(mask, dim=0)
+
+        return latent, label, pos, mask
+
     def __getitem__(self, idx):
         x = self.latent_info[idx]
 
         latent = np.load(x["path"])
-
-        h, w = latent.shape[1:]
 
         latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
         mask = np.ones(latent.shape[0], dtype=np.bool_)
 
-        latent = torch.tensor(latent)
-        latent = torch.nn.functional.pad(latent, (
-            0, self.patch_size * self.patch_size * self.C - latent.shape[1], 0, self.max_length - latent.shape[0]))
-
-        pos = torch.tensor(pos)
-        pos = torch.nn.functional.pad(pos, (
-            0, self.embed_dim - pos.shape[1], 0, self.max_length - pos.shape[0]))
-
-        mask = torch.tensor(mask)
-        mask = torch.nn.functional.pad(mask, (0, self.max_length - mask.shape[0]))
-
-        label = torch.tensor(label)
-
-        return latent, label, pos, mask, h, w
+        return torch.tensor(latent), torch.tensor(label), torch.tensor(pos), torch.tensor(mask)
 
 
 def create_dataloader_imagenet_preprocessing(
@@ -171,14 +185,5 @@ def create_dataloader_imagenet_preprocessing(
 ):
     dataset = ImageNetWithPathIterator(config)
     dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=1)
-
-    return dataloader
-
-
-def create_dataloader_imagenet_latent(
-        config,
-):
-    dataset = ImageNetLatentIterator(config)
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=config.get("batch_size", 256))
 
     return dataloader
