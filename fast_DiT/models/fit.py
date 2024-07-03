@@ -212,6 +212,7 @@ class SelfAttention(nn.Module):
 
         self.apply_rotate_embed = apply_rotate_embed
 
+        # TODO: check if flash attention is currently used
         if enable_flash_attention:
             self.flash_attention = nn.MultiheadAttention(embed_dim=head_dim, num_heads=num_heads, dropout=attn_drop)
         else:
