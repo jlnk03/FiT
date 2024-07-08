@@ -254,6 +254,7 @@ class FiTModule(L.LightningModule):
         loader = DataLoader(
             dataset,
             batch_size=self.args.global_batch_size,
+            prefetch_factor=4,
             shuffle=False,
             num_workers=self.args.num_workers,
             pin_memory=True,

@@ -175,7 +175,7 @@ class FiTModule(L.LightningModule):
         vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(self.device)
 
         # Labels to condition the model with (feel free to change):
-        class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
+        class_labels = [207, 396, 372, 396, 88, 979, 417, 279]
 
         # Create sampling noise:
         n = len(class_labels)
@@ -253,7 +253,6 @@ class FiTModule(L.LightningModule):
             num_workers=self.args.num_workers,
             pin_memory=True,
             drop_last=True,
-            collate_fn=dataset.collate
         )
         return loader
 
