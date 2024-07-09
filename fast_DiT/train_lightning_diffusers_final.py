@@ -238,7 +238,8 @@ class FiTModule(L.LightningModule):
             shuffle=True,
             num_workers=self.args.num_workers,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
+            collate_fn=dataset.collate
         )
         return loader
     
@@ -273,7 +274,7 @@ def main(args):
     model = FiTModule(args)
     
     # Initialize W&B logger
-    wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT", resume="allow", id=args.wandb_run_id)
+    wandb_logger = WandbLogger(name="masked_flexible_diffusion_training", project="FiT", resume="allow", id=args.wandb_run_id)
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),

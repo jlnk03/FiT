@@ -161,7 +161,7 @@ class ImageNetLatentIterator(Dataset):
             latent, label, pos, mask = zip(*concatenate)
             
             latent = torch.stack(latent)
-            label = torch.stack([l.unsqueeze(0) for l in label])  # Stack individual label tensors
+            label = torch.stack([l.unsqueeze(0) for l in label]).squeeze(1)
             pos = torch.stack(pos)
             mask = torch.stack(mask)
 
