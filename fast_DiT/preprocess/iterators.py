@@ -153,6 +153,7 @@ class ImageNetLatentIterator(Dataset):
         return latent, pos
 
     def subsample(self, latent, label, pos, mask, number_of_tokens):
+        print(f'latent shape subsample: {latent.shape}', flush=True)
         if latent.shape[0] > number_of_tokens:
             permutation = torch.randperm(latent.shape[0])
 
@@ -165,21 +166,21 @@ class ImageNetLatentIterator(Dataset):
             pos = torch.nn.functional.pad(pos, (0, self.embed_dim - pos.shape[1], 0, number_of_tokens - pos.shape[0]))
             mask = torch.nn.functional.pad(mask, (0, number_of_tokens - mask.shape[0]))
 
-        return latent, label, pos, mask
+        return latent, torch.Tensor(label), pos, mask
 
     def collate(self, batch):
-        number_of_tokens = random.randint(1, self.max_length)
+            number_of_tokens = random.randint(32, self.max_length)
 
-        concatenate = [self.subsample(latent, label, pos, mask, number_of_tokens) for latent, label, pos, mask in batch]
+            concatenate = [self.subsample(latent, label, pos, mask, number_of_tokens) for latent, label, pos, mask in batch]
 
-        latent, label, pos, mask = zip(*concatenate)
+            latent, label, pos, mask = zip(*concatenate)
+            
+            latent = torch.stack(latent)
+            label = torch.tensor(label)  # Convert list of scalars to a tensor
+            pos = torch.stack(pos)
+            mask = torch.stack(mask)
 
-        latent = torch.concatenate(latent, dim=0)
-        label = torch.concatenate(label, dim=0)
-        pos = torch.concatenate(pos, dim=0)
-        mask = torch.concatenate(mask, dim=0)
-
-        return latent, label, pos, mask
+            return latent, label, pos, mask
 
     def __getitem__(self, idx):
         x = self.latent_info[idx]

@@ -33,7 +33,8 @@ class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        # self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
+        self.model = FiT_models[args.model]()
 
         self.automatic_optimization = True
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
@@ -44,7 +45,7 @@ class FiTModule(L.LightningModule):
         return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
-        latent, label, pos, mask, h, w = batch
+        latent, label, pos, mask = batch
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
@@ -70,7 +71,7 @@ class FiTModule(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        latent, label, pos, mask, h, w = batch
+        latent, label, pos, mask = batch
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
         t = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (latent.shape[0],), device=self.device)
@@ -135,7 +136,7 @@ class FiTModule(L.LightningModule):
         x = x[:, :valid_t]
         x = self._unpatchify(x, nh, nw, p, c)
         return x
-    
+
 
     def _create_pos_embed(
         self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
