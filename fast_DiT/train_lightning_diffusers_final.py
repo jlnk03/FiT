@@ -1,32 +1,33 @@
-import argparse
 import os
-from typing import Tuple, Union
-
-import lightning as L
+from lightning.pytorch.utilities.types import EVAL_DATALOADERS
 import torch
-import torch.nn.functional as F
-from diffusers import DDIMScheduler
-from diffusers.models import AutoencoderKL
+import argparse
 from lightning import Trainer, seed_everything
-from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import ModelCheckpoint
+from diffusion import create_diffusion
+from diffusers.models import AutoencoderKL
+from models.fit import FiT_models
+from preprocess_old.iterators import ImageNetLatentIterator
+import lightning as L
+from torch.utils.data import DataLoader
+from copy import deepcopy
+from collections import OrderedDict
+from diffusers import DDIMScheduler
+import torch.nn.functional as F
 from lightning.pytorch.profilers import AdvancedProfiler
 from torch import Tensor
-from torch.utils.data import DataLoader
+from typing import Any, Dict, Tuple, Type, Union
 from torchvision.utils import save_image
-
-from diffusion import create_diffusion
 from ema import EMA
-from models.fit import FiT_models
-from preprocess.iterators import ImageNetLatentIterator
-from preprocess.pos_embed import precompute_freqs_cis_2d
+from preprocess_old.pos_embed import precompute_freqs_cis_2d
+from diffusion.gaussian_diffusion import GaussianDiffusion
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
 #################################################################################
 
 torch.set_float32_matmul_precision('high')
-
 
 class FiTModule(L.LightningModule):
     def __init__(self, args):
@@ -93,6 +94,7 @@ class FiTModule(L.LightningModule):
 
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
+    
 
     def _patchify(self, x: torch.Tensor, p: int) -> torch.Tensor:
         # N, C, H, W -> N, T, D
@@ -123,6 +125,7 @@ class FiTModule(L.LightningModule):
         x_padded[:, : x_fill.shape[1]] = x_fill
         x_padded = self._unpatchify(x_padded, nh, nw, p, c)
         return x_padded
+    
 
     def _unpad_latent(self, x: Tensor, valid_t: int, h: int, w: int, p: int) -> Tensor:
         # N, C, max_size, max_size -> N, C, H, W
@@ -132,9 +135,10 @@ class FiTModule(L.LightningModule):
         x = x[:, :valid_t]
         x = self._unpatchify(x, nh, nw, p, c)
         return x
+    
 
     def _create_pos_embed(
-            self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
+        self, h: int, w: int, p: int, max_length: int, embed_dim: int, method: str = "rotate"
     ) -> Tuple[torch.Tensor, int]:
         # 1, T, D
         nh, nw = h // p, w // p
@@ -154,6 +158,7 @@ class FiTModule(L.LightningModule):
         pos_embed = pos_embed[None, ...]
         pos_embed = torch.tensor(pos_embed)
         return pos_embed, pos_embed_fill.shape[0]
+    
 
     def _create_mask(self, valid_t: int, max_length: int, n: int) -> torch.Tensor:
         # 1, T
@@ -165,52 +170,52 @@ class FiTModule(L.LightningModule):
         mask = mask.unsqueeze(0).repeat(n, 1)
         return mask
 
+
     def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
 
-        # Load model:
-        latent_size = args.image_size // 8
-        latent_height, latent_width = args.image_height // 8, args.image_width // 8
-        model = self.model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
-        diffusion = create_diffusion(str(args.num_sampling_steps))
-        vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(self.device)
+            # Load model:
+            latent_size = args.image_size // 8
+            latent_height, latent_width = args.image_height // 8, args.image_width // 8
+            model = self.model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
+            diffusion = create_diffusion(str(args.num_sampling_steps))
+            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(self.device)
 
-        # Labels to condition the model with (feel free to change):
-        class_labels = [207, 396, 372, 396, 88, 979, 417, 279]
+            # Labels to condition the model with (feel free to change):
+            class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
 
-        # Create sampling noise:
-        n = len(class_labels)
-        z = torch.randn(n, 4, latent_height, latent_width, device=self.device)
-        y = torch.tensor(class_labels, device=self.device)
-        y_null = torch.ones_like(y) * 1000
+            # Create sampling noise:
+            n = len(class_labels)
+            z = torch.randn(n, 4, latent_height, latent_width, device=self.device)
+            y = torch.tensor(class_labels, device=self.device)
+            y_null = torch.ones_like(y) * 1000
 
-        y = torch.cat([y, y_null], 0)
-        z = torch.cat([z, z], 0)
+            y = torch.cat([y, y_null], 0)
+            z = torch.cat([z, z], 0)
 
-        p = 2
-        max_size = 32
-        max_length = 256
+            p = 2
+            max_size = 32
+            max_length = 256
 
-        ### mindspore infer pipeline
-        n, _, h, w = z.shape
-        z = self._pad_latent(z, p, max_size, max_length)
-        pos, valid_t = self._create_pos_embed(h, w, p, max_length, 64, "rotate")
-        mask = self._create_mask(valid_t, max_length, n)
+            ### mindspore infer pipeline
+            n, _, h, w = z.shape
+            z = self._pad_latent(z, p, max_size, max_length)
+            pos, valid_t = self._create_pos_embed(h, w, p, max_length, 64, "rotate")
+            mask = self._create_mask(valid_t, max_length, n)
 
-        model_kwargs = dict(y=y, pos=pos, mask=mask, cfg_scale=15)
+            model_kwargs = dict(y=y, pos=pos, mask=mask, cfg_scale=15)
 
-        # TODO: infer pipeline
-        latents = diffusion.ddim_sample_loop(
-            model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True,
-            device=self.device
-        )
+            #TODO: infer pipeline
+            latents = diffusion.ddim_sample_loop(
+                model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=self.device
+            )
 
-        samples, _ = latents.chunk(2, dim=0)  # Remove null class samples
-        samples = self._unpad_latent(samples, valid_t, h, w, p)
+            samples, _ = latents.chunk(2, dim=0)  # Remove null class samples
+            samples = self._unpad_latent(samples, valid_t, h, w, p)
+            
+            samples = vae.decode(samples / 0.18215).sample
 
-        samples = vae.decode(samples / 0.18215).sample
-
-        # Save and display images:
-        save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(-1, 1))
+            # Save and display images:
+            save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(-1, 1))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
@@ -235,7 +240,7 @@ class FiTModule(L.LightningModule):
             drop_last=True
         )
         return loader
-
+    
     def val_dataloader(self):
         dataset = ImageNetLatentIterator({
             "latent_folder": self.args.feature_val_path,
@@ -249,13 +254,14 @@ class FiTModule(L.LightningModule):
         loader = DataLoader(
             dataset,
             batch_size=self.args.global_batch_size,
+            prefetch_factor=4,
             shuffle=False,
             num_workers=self.args.num_workers,
             pin_memory=True,
             drop_last=True,
+            collate_fn=dataset.collate
         )
         return loader
-
 
 #################################################################################
 #                                 Main Function                                 #
@@ -263,12 +269,12 @@ class FiTModule(L.LightningModule):
 
 def main(args):
     seed_everything(args.global_seed)
-
+    
     model = FiTModule(args)
-
+    
     # Initialize W&B logger
     wandb_logger = WandbLogger(name="FiT_Training_100_epochs", project="FiT", resume="allow", id=args.wandb_run_id)
-
+    
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
         save_top_k=-1,  # Save all models
@@ -279,7 +285,7 @@ def main(args):
     ema_callback = EMA(decay=0.9999)
 
     profiler = AdvancedProfiler(dirpath=args.results_dir, filename="perf_logs")
-
+    
     trainer = Trainer(
         max_epochs=args.epochs,
         logger=wandb_logger,
@@ -289,9 +295,8 @@ def main(args):
         profiler=profiler,
         log_every_n_steps=args.log_every,
     )
-
+    
     trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
