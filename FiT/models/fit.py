@@ -482,6 +482,9 @@ class FiT(nn.Module):
         h: height of the input image latent
         w: width of the input image latent
         """
+        print(x.shape)
+        print(pos.shape)
+        print(mask.shape)
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
         # pos.to(x.device)
         # mask.to(x.device)
