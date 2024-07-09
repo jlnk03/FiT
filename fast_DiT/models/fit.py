@@ -509,6 +509,8 @@ class FiT(nn.Module):
         else:
             freqs_cis = None
 
+        print(c.shape)
+
         for block in self.blocks:
             x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
         x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
