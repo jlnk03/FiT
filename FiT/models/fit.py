@@ -482,6 +482,7 @@ class FiT(nn.Module):
         h: height of the input image latent
         w: width of the input image latent
         """
+        print(y.shape)
         # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
         # pos.to(x.device)
         # mask.to(x.device)
@@ -508,8 +509,6 @@ class FiT(nn.Module):
             freqs_cis = pos
         else:
             freqs_cis = None
-
-        print(c.shape)
 
         for block in self.blocks:
             x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
