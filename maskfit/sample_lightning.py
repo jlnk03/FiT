@@ -4,7 +4,7 @@ from lightning import Trainer
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from diffusers import DDIMScheduler
-from train_lightning_diffusers_final import FiTModule
+from train import FiTModule
 from torchvision.utils import save_image
 
 def main(args):
