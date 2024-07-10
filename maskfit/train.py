@@ -171,53 +171,6 @@ class FiTModule(L.LightningModule):
         mask = mask.unsqueeze(0).repeat(n, 1)
         return mask
 
-
-    def predict_step(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, cfg_scale: Union[float, Tensor]):
-
-            # Load model:
-            latent_size = args.image_size // 8
-            latent_height, latent_width = args.image_height // 8, args.image_width // 8
-            model = self.model.load_from_checkpoint(args.ckpt or "checkpoint/FiT-B-2.pt")
-            diffusion = create_diffusion(str(args.num_sampling_steps))
-            vae = AutoencoderKL.from_pretrained(f"stabilityai/sd-vae-ft-{args.vae}").to(self.device)
-
-            # Labels to condition the model with (feel free to change):
-            class_labels = [207, 360, 387, 974, 88, 979, 417, 279]
-
-            # Create sampling noise:
-            n = len(class_labels)
-            z = torch.randn(n, 4, latent_height, latent_width, device=self.device)
-            y = torch.tensor(class_labels, device=self.device)
-            y_null = torch.ones_like(y) * 1000
-
-            y = torch.cat([y, y_null], 0)
-            z = torch.cat([z, z], 0)
-
-            p = 2
-            max_size = 32
-            max_length = 256
-
-            ### mindspore infer pipeline
-            n, _, h, w = z.shape
-            z = self._pad_latent(z, p, max_size, max_length)
-            pos, valid_t = self._create_pos_embed(h, w, p, max_length, 64, "rotate")
-            mask = self._create_mask(valid_t, max_length, n)
-
-            model_kwargs = dict(y=y, pos=pos, mask=mask, cfg_scale=15)
-
-            #TODO: infer pipeline
-            latents = diffusion.ddim_sample_loop(
-                model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=self.device
-            )
-
-            samples, _ = latents.chunk(2, dim=0)  # Remove null class samples
-            samples = self._unpad_latent(samples, valid_t, h, w, p)
-            
-            samples = vae.decode(samples / 0.18215).sample
-
-            # Save and display images:
-            save_image(samples, "sample.png", nrow=4, normalize=True, value_range=(-1, 1))
-
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
         return optimizer
