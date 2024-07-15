@@ -2,6 +2,7 @@ from typing import Any, Dict, Tuple, Type, Union, Optional
 import torch
 # from torch import Tensor, nn
 from torch.nn import functional as F
+import torch.nn as nn
 
 try:
     from typing import Literal
@@ -24,6 +25,8 @@ from torch.nn.init import xavier_uniform_, constant_, normal_
 
 import math
 
+import numpy as np
+
 
 __all__ = [
     "FiT",
@@ -44,6 +47,245 @@ __all__ = [
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+
+class DropPath(nn.Module):
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        if self.drop_prob == 0. or not self.training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = keep_prob + \
+            torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()  # binarize
+        output = x.div(keep_prob) * random_tensor
+        return output
+
+
+class SwinFiTBlock(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        window_size=7,
+        shift_size=0,
+        mlp_ratio=4.,
+        qkv_bias=True,
+        drop=0.,
+        attn_drop=0.,
+        drop_path=0.,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm
+    ):
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.shift_size = shift_size
+        self.mlp_ratio = mlp_ratio
+
+        self.norm1 = norm_layer(dim, elementwise_affine=False, eps=1e-6)
+        self.attn = WindowAttention(
+            dim, window_size=(
+                self.window_size, self.window_size), num_heads=num_heads, qkv_bias=qkv_bias,
+            attn_drop=attn_drop, proj_drop=drop)
+
+        self.drop_path = DropPath(
+            drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim, elementwise_affine=False, eps=1e-6)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim,
+                       act_layer=act_layer, drop=drop)
+
+        self.H = None
+        self.W = None
+
+        # adaLN-Zero conditioning
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(dim, 6 * dim)
+        )
+
+    def forward(self, x, c, mask_matrix):
+        B, L, C = x.shape
+        H, W = self.H, self.W
+        assert L == H * W, "input feature has wrong size"
+
+        shortcut = x
+
+        # adaLN-Zero conditioning
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(
+            c).chunk(6, dim=1)
+
+        # Apply adaLN-Zero to norm1
+        x = modulate(self.norm1(x), shift_msa, scale_msa)
+
+        x = x.view(B, H, W, C)
+
+        # pad feature maps to multiples of window size
+        pad_l = pad_t = 0
+        pad_r = (self.window_size - W % self.window_size) % self.window_size
+        pad_b = (self.window_size - H % self.window_size) % self.window_size
+        x = F.pad(x, (0, 0, pad_l, pad_r, pad_t, pad_b))
+        _, Hp, Wp, _ = x.shape
+
+        # cyclic shift
+        if self.shift_size > 0:
+            shifted_x = torch.roll(
+                x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
+            attn_mask = mask_matrix
+        else:
+            shifted_x = x
+            attn_mask = None
+
+        # partition windows
+        # B*nW, window_size, window_size, C
+        x_windows = window_partition(shifted_x, self.window_size)
+        # B*nW, window_size*window_size, C
+        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)
+
+        # W-MSA/SW-MSA
+        # B*nW, window_size*window_size, C
+        attn_windows = self.attn(x_windows, mask=attn_mask)
+
+        # merge windows
+        attn_windows = attn_windows.view(-1,
+                                         self.window_size, self.window_size, C)
+        shifted_x = window_reverse(
+            attn_windows, self.window_size, Hp, Wp)  # B, H', W', C
+
+        # reverse cyclic shift
+        if self.shift_size > 0:
+            x = torch.roll(shifted_x, shifts=(
+                self.shift_size, self.shift_size), dims=(1, 2))
+        else:
+            x = shifted_x
+
+        if pad_r > 0 or pad_b > 0:
+            x = x[:, :H, :W, :].contiguous()
+
+        x = x.view(B, H * W, C)
+
+        # Apply gating for MSA
+        x = shortcut + self.drop_path(gate_msa.unsqueeze(1) * x)
+
+        # Apply adaLN-Zero to norm2
+        x = modulate(self.norm2(x), shift_mlp, scale_mlp)
+
+        # FFN
+        x = x + self.drop_path(gate_mlp.unsqueeze(1) * self.mlp(x))
+
+        return x
+
+
+class WindowAttention(nn.Module):
+    def __init__(self, dim, window_size, num_heads, qkv_bias=True, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        self.dim = dim
+        self.window_size = window_size  # Wh, Ww
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+
+        # define a parameter table of relative position bias
+        self.relative_position_bias_table = nn.Parameter(
+            torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
+
+        # get pair-wise relative position index for each token inside the window
+        coords_h = torch.arange(self.window_size[0])
+        coords_w = torch.arange(self.window_size[1])
+        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
+        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+        relative_coords = coords_flatten[:, :, None] - \
+            coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+        relative_coords = relative_coords.permute(
+            1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
+        relative_coords[:, :, 0] += self.window_size[0] - \
+            1  # shift to start from 0
+        relative_coords[:, :, 1] += self.window_size[1] - 1
+        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+        relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        self.register_buffer("relative_position_index",
+                             relative_position_index)
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        nn.init.trunc_normal_(self.relative_position_bias_table, std=.02)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x, mask=None):
+        B_, N, C = x.shape
+        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C //
+                                  self.num_heads).permute(2, 0, 3, 1, 4)
+        # make torchscript happy (cannot use tensor as tuple)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        q = q * self.scale
+        attn = (q @ k.transpose(-2, -1))
+
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1)  # Wh*Ww,Wh*Ww,nH
+        relative_position_bias = relative_position_bias.permute(
+            2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+        attn = attn + relative_position_bias.unsqueeze(0)
+
+        if mask is not None:
+            nW = mask.shape[0]
+            attn = attn.view(B_ // nW, nW, self.num_heads, N,
+                             N) + mask.unsqueeze(1).unsqueeze(0)
+            attn = attn.view(-1, self.num_heads, N, N)
+            attn = self.softmax(attn)
+        else:
+            attn = self.softmax(attn)
+
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
+def window_partition(x, window_size):
+    """
+    Args:
+        x: (B, H, W, C)
+        window_size (int): window size
+    Returns:
+        windows: (num_windows*B, window_size, window_size, C)
+    """
+    B, H, W, C = x.shape
+    x = x.view(B, H // window_size, window_size,
+               W // window_size, window_size, C)
+    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous(
+    ).view(-1, window_size, window_size, C)
+    return windows
+
+
+def window_reverse(windows, window_size, H, W):
+    """
+    Args:
+        windows: (num_windows*B, window_size, window_size, C)
+        window_size (int): Window size
+        H (int): Height of image
+        W (int): Width of image
+    Returns:
+        x: (B, H, W, C)
+    """
+    B = int(windows.shape[0] / (H * W / window_size / window_size))
+    x = windows.view(B, H // window_size, W // window_size,
+                     window_size, window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    return x
+
+
 
 class TimestepEmbedder(nn.Module):
     """
@@ -338,27 +580,6 @@ class FiTBlock(nn.Module):
 
 
 class FiT(nn.Module):
-    """
-    FiT: Flexible Vision Transformer for Diffusion Model
-    https://arxiv.org/abs/2402.12376
-
-    Args:
-        patch_size: patch size. Default: 2
-        in_channels: The number of input channels in the input latent. Default: 4
-        hidden_size: The hidden size of the Transformer model. Default: 1152
-        depth: The number of blocks in this Transformer. Default: 28
-        num_heads: The number of attention heads. Default: 16
-        mlp_ratio: The expansion ratio for the hidden dimension in the MLP of the Transformer. Default: 4.0
-        class_dropout_prob: The dropout probability for the class labels in the label embedder. Default: 0.1
-        num_classes: The number of classes of the input labels. Default: 1000
-        learn_sigma: Whether to learn the diffusion model's sigma parameter. Default: True
-        ffn: Method to use in FFN block. Can choose SwiGLU or MLP. Default: swiglu
-        pos: Method to use in positional encoding. Can choose absolute or rotate. Default: rotate
-        block_kwargs: Additional keyword arguments for the Transformer blocks. for example, `{'enable_flash_attention':True}`. Default: {}
-    """
-
-    # TODO: Check learn_sigma. currently removed due to shape issues
-
     def __init__(
         self,
         patch_size: int = 2,
@@ -370,19 +591,16 @@ class FiT(nn.Module):
         class_dropout_prob: float = 0.1,
         num_classes: int = 1000,
         learn_sigma: bool = False,
-        ffn: Literal["swiglu", "mlp"] = "swiglu",
-        pos: Literal["rotate", "absolute"] = "rotate",
-        block_kwargs: Dict[str, Any] = {},
+        window_size: int = 7,
+        shift_size: int = 0,
     ):
         super().__init__()
         self.learn_sigma = learn_sigma
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
-        self.pos = pos
-
-        assert pos in ["absolute", "rotate"]
-        assert ffn in ["swiglu", "mlp"]
+        self.window_size = window_size
+        self.shift_size = shift_size
 
         self.x_embedder = nn.Linear(
             self.in_channels * patch_size * patch_size, hidden_size)
@@ -390,13 +608,17 @@ class FiT(nn.Module):
         self.y_embedder = LabelEmbedder(
             num_classes, hidden_size, class_dropout_prob)
 
-        self.blocks = nn.Sequential(
-            *[
-                FiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio,
-                         ffn=ffn, pos=pos, **block_kwargs)
-                for _ in range(depth)
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            SwinFiTBlock(
+                dim=hidden_size,
+                num_heads=num_heads,
+                window_size=window_size,
+                shift_size=shift_size if (i % 2 == 1) else 0,
+                mlp_ratio=mlp_ratio,
+            )
+            for i in range(depth)
+        ])
+
         self.final_layer = FinalLayer(
             hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
@@ -470,52 +692,87 @@ class FiT(nn.Module):
         x = x.permute(0, 2, 4, 3, 5, 1)  # N, nh, nw, patch, patch, C
         x = x.reshape(N, nh * nw, -1)
         return x
+    
+    def forward(self, x: Tensor, t: Tensor, y: Tensor):
+        _, _, h, w = x.shape
+        x = self.patchify(x)
+        x = self.x_embedder(x)
 
-    def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, train=True) -> Tensor:
-        """
-        Forward pass of FiT.
-        x: (N, C, H, W) tensor of latent token
-        t: (N,) tensor of diffusion timesteps
-        y: (N,) tensor of class labels
-        pos: (N, T, D) tensor of positional embedding or precomputed cosine and sine frequencies
-        mask: (N, T) tensor of valid mask
-        h: height of the input image latent
-        w: width of the input image latent
-        """
-        # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
-        # pos.to(x.device)
-        # mask.to(x.device)
-        # print(f'x device train: {x.device}')
-        # print(f't device train: {t.device}')
-        # print(f'y device train: {y.device}')
-        # print(f'pos device train: {pos.device}')
-        # print(f'mask device train: {mask.device}')
-        if not train:
-            _, _, h, w = x.shape
-            x = self.patchify(x)
-        
-        if self.pos == "absolute":
-            # (N, T, D), where T = H * W / patch_size ** 2
-            x = self.x_embedder(x) + pos.to(x.dtype)
-        else:
-            x = self.x_embedder(x)
+        t = self.t_embedder(t)
+        y = self.y_embedder(y, self.training)
+        c = t + y
 
-        t = self.t_embedder(t)  # (N, D)
-        y = self.y_embedder(y, self.training)  # (N, D)
-        c = t + y  # (N, D)
-
-        if self.pos == "rotate":
-            freqs_cis = pos
-        else:
-            freqs_cis = None
+        # Calculate attention mask for SW-MSA
+        Hp = int(np.ceil(h / self.patch_size))
+        Wp = int(np.ceil(w / self.patch_size))
+        img_mask = torch.zeros((1, Hp, Wp, 1), device=x.device)
+        h_slices = (slice(0, -self.window_size),
+                    slice(-self.window_size, -self.shift_size),
+                    slice(-self.shift_size, None))
+        w_slices = (slice(0, -self.window_size),
+                    slice(-self.window_size, -self.shift_size),
+                    slice(-self.shift_size, None))
+        cnt = 0
+        for h in h_slices:
+            for w in w_slices:
+                img_mask[:, h, w, :] = cnt
+                cnt += 1
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
 
         for block in self.blocks:
-            x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
-        x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
-        if not train:
-            # x = x[mask]
-            x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
+            x = block(x, c, mask_matrix=attn_mask)
+        x = self.final_layer(x, c)
+        x = self.unpatchify(x, h, w)
         return x
+
+    # def forward(self, x: Tensor, t: Tensor, y: Tensor, pos: Tensor, mask: Tensor, train=True) -> Tensor:
+    #     """
+    #     Forward pass of FiT.
+    #     x: (N, C, H, W) tensor of latent token
+    #     t: (N,) tensor of diffusion timesteps
+    #     y: (N,) tensor of class labels
+    #     pos: (N, T, D) tensor of positional embedding or precomputed cosine and sine frequencies
+    #     mask: (N, T) tensor of valid mask
+    #     h: height of the input image latent
+    #     w: width of the input image latent
+    #     """
+    #     # TODO: Check the shape of x and if pathify is necessary if already done in dataloader
+    #     # pos.to(x.device)
+    #     # mask.to(x.device)
+    #     # print(f'x device train: {x.device}')
+    #     # print(f't device train: {t.device}')
+    #     # print(f'y device train: {y.device}')
+    #     # print(f'pos device train: {pos.device}')
+    #     # print(f'mask device train: {mask.device}')
+    #     if not train:
+    #         _, _, h, w = x.shape
+    #         x = self.patchify(x)
+        
+    #     if self.pos == "absolute":
+    #         # (N, T, D), where T = H * W / patch_size ** 2
+    #         x = self.x_embedder(x) + pos.to(x.dtype)
+    #     else:
+    #         x = self.x_embedder(x)
+
+    #     t = self.t_embedder(t)  # (N, D)
+    #     y = self.y_embedder(y, self.training)  # (N, D)
+    #     c = t + y  # (N, D)
+
+    #     if self.pos == "rotate":
+    #         freqs_cis = pos
+    #     else:
+    #         freqs_cis = None
+
+    #     for block in self.blocks:
+    #         x = block(x, c, mask=mask, freqs_cis=freqs_cis)  # (N, T, D)
+    #     x = self.final_layer(x, c)  # (N, T, patch_size ** 2 * out_channels)
+    #     if not train:
+    #         # x = x[mask]
+    #         x = self.unpatchify(x, h, w)  # (N, out_channels, H, W)
+    #     return x
 
     # @ms.jit
     # def construct_with_cfg(
