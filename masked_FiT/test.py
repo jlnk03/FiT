@@ -29,7 +29,7 @@ def n_dataloader():
 def test_n_dataloader():
     n = iter(n_dataloader())
 
-    for i in range(10):
+    for i in range(100):
         next(n)
 
 
@@ -57,7 +57,7 @@ def o_dataloader():
 def test_o_dataloader():
     o = iter(o_dataloader())
 
-    for i in range(10):
+    for i in range(100):
         next(o)
 
 
