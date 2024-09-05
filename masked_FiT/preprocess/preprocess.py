@@ -6,7 +6,7 @@ import torch
 from diffusers import AutoencoderKL
 from tqdm import tqdm
 
-from preprocess_old.iterators import create_dataloader_imagenet_preprocessing
+from preprocess.iterators import create_dataloader_imagenet_preprocessing
 
 config = dict()
 
