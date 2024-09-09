@@ -92,9 +92,9 @@ def test_n_o_dataloader():
 
 
 if __name__ == "__main__":
-    cProfile.run('test_n_dataloader()')
-    print('......................................................................')
     cProfile.run('test_n_o_dataloader()')
     print('......................................................................')
     cProfile.run('test_o_dataloader()')
+    print('......................................................................')
+    cProfile.run('test_n_dataloader()')
 
