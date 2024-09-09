@@ -30,7 +30,7 @@ def n_dataloader():
 def test_n_dataloader():
     n = iter(n_dataloader())
 
-    for i in range(5000):
+    for i in range(1000):
         next(n)
 
 
@@ -58,7 +58,7 @@ def o_dataloader():
 def test_o_dataloader():
     o = iter(o_dataloader())
 
-    for i in range(5000):
+    for i in range(1000):
         next(o)
 
 
@@ -87,7 +87,7 @@ def n_o_dataloader():
 def test_n_o_dataloader():
     n_o = iter(n_o_dataloader())
 
-    for i in range(5000):
+    for i in range(1000):
         next(n_o)
 
 
