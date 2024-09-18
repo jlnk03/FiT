@@ -22,6 +22,7 @@ from torchvision.utils import save_image
 from ema import EMA
 from preprocess_old.pos_embed import precompute_freqs_cis_2d
 from diffusion.gaussian_diffusion import GaussianDiffusion
+import time
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -269,12 +270,11 @@ class FiTModule(L.LightningModule):
 #################################################################################
 
 def main(args):
+    start_time = time.time()
+
     seed_everything(args.global_seed)
     
     model = FiTModule(args)
-    
-    # Initialize W&B logger
-    wandb_logger = WandbLogger(name="masked_flexible_diffusion_training", project="FiT", resume="allow", id=args.wandb_run_id)
     
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
@@ -289,7 +289,6 @@ def main(args):
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        logger=wandb_logger,
         callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
         accumulate_grad_batches=2,
@@ -298,6 +297,8 @@ def main(args):
     )
     
     trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
+
+    print("--- %s seconds ---" % (time.time() - start_time))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
