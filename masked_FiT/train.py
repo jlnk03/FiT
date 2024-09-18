@@ -8,7 +8,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from diffusion import create_diffusion
 from diffusers.models import AutoencoderKL
 from models.fit import FiT_models
-from preprocess_old.iterators import ImageNetLatentIterator
+from preprocess.iterators import ImageNetLatentIterator
 import lightning as L
 from torch.utils.data import DataLoader
 from copy import deepcopy
