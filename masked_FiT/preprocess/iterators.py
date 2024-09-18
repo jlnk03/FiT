@@ -60,7 +60,7 @@ class ImageNetWithPathIterator(Dataset):
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         images_info = sorted(images_info)
-        return images_info
+        return images_info[:5000]
 
     def __len__(self):
         return len(self.image_paths)
