@@ -143,8 +143,6 @@ class ImageNetLatentIterator(Dataset):
 
         latent = np.load(x["path"])
 
-        h, w = latent.shape[1:]
-
         latent = self._random_horiztotal_flip(latent)
         latent, pos = self._patchify(latent)
         label = self.label_mapping[x["label"]]
@@ -163,7 +161,7 @@ class ImageNetLatentIterator(Dataset):
 
         label = torch.tensor(label)
 
-        return latent, label, pos, mask, h, w
+        return latent, label, pos, mask
 
 
 def create_dataloader_imagenet_preprocessing(
