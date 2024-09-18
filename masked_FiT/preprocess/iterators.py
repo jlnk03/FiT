@@ -61,7 +61,7 @@ class ImageNetWithPathIterator(Dataset):
 
         images_info = sorted(images_info)
         print(len(images_info))
-        return images_info[:5000]
+        return images_info
 
     def __len__(self):
         return len(self.image_paths)
@@ -107,7 +107,7 @@ class ImageNetLatentIterator(Dataset):
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         latent_info = sorted(latent_info, key=lambda x: x["path"])
-        return latent_info
+        return latent_info[:5000]
 
     def _create_label_mapping(self, latent_info: List[Dict[str, str]]):
         labels = set([x["label"] for x in latent_info])
