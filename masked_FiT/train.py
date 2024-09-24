@@ -273,24 +273,21 @@ class FiTModule(L.LightningModule):
 #################################################################################
 
 def main(args):
-    start_time = time.time()
-
     seed_everything(args.global_seed)
     
     model = FiTModule(args)
     
-    checkpoint_callback = ModelCheckpoint(
+    '''checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(args.results_dir, "checkpoints"),
         save_top_k=-1,  # Save all models
         # every_n_train_steps=args.ckpt_every
         every_n_epochs=1
-    )
+    )'''
 
-    ema_callback = EMA(decay=0.9999)
+    #ema_callback = EMA(decay=0.9999)
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
         accumulate_grad_batches=2,
         profiler="simple",
@@ -298,8 +295,6 @@ def main(args):
     )
     
     trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
-
-    print("--- %s seconds ---" % (time.time() - start_time))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
