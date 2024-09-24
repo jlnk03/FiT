@@ -23,6 +23,7 @@ from ema import EMA
 from preprocess_old.pos_embed import precompute_freqs_cis_2d
 from diffusion.gaussian_diffusion import GaussianDiffusion
 import time
+import cProfile
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -316,4 +317,5 @@ if __name__ == "__main__":
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
     parser.add_argument("--wandb-run-id", type=str, default=None)
     args = parser.parse_args()
-    main(args)
+    cProfile.run('main(args)')
+    #main(args)

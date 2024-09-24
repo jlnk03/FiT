@@ -107,7 +107,7 @@ class ImageNetLatentIterator(Dataset):
             raise RuntimeError(f"Cannot find any image under `{root}`")
 
         latent_info = sorted(latent_info, key=lambda x: x["path"])
-        return latent_info[:50000]
+        return latent_info[:30000]
 
     def _create_label_mapping(self, latent_info: List[Dict[str, str]]):
         labels = set([x["label"] for x in latent_info])
