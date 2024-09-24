@@ -20,7 +20,7 @@ from torch import Tensor
 from typing import Any, Dict, Tuple, Type, Union
 from torchvision.utils import save_image
 from ema import EMA
-from preprocess_old.pos_embed import precompute_freqs_cis_2d
+from preprocess.pos_embed import precompute_freqs_cis_2d
 from diffusion.gaussian_diffusion import GaussianDiffusion
 import time
 import cProfile
