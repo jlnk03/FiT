@@ -31,6 +31,10 @@ import cProfile
 
 torch.set_float32_matmul_precision('high')
 
+forward = 0
+backward = 0
+loader = 0
+
 class FiTModule(L.LightningModule):
     def __init__(self, args):
         super().__init__()
@@ -56,7 +60,6 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
-        cProfile.run('self.model(x_t, t=t, **model_kwargs)')
         model_output = self.model(x_t, t=t, **model_kwargs)
 
         # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
@@ -284,15 +287,13 @@ def main(args):
     )
 
     ema_callback = EMA(decay=0.9999)
-
-    profiler = AdvancedProfiler(dirpath=args.results_dir, filename="perf_logs")
     
     trainer = Trainer(
         max_epochs=args.epochs,
         callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
         accumulate_grad_batches=2,
-        profiler=profiler,
+        profiler="simple",
         log_every_n_steps=args.log_every,
     )
     
