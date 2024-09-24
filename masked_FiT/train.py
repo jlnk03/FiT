@@ -56,6 +56,7 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
+        cProfile.run('self.model(x_t, t=t, **model_kwargs)')
         model_output = self.model(x_t, t=t, **model_kwargs)
 
         # loss = (torch.sum(torch.pow(model_output * mask - noise * mask, 2), dim=1)
@@ -317,5 +318,4 @@ if __name__ == "__main__":
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
     parser.add_argument("--wandb-run-id", type=str, default=None)
     args = parser.parse_args()
-    cProfile.run('main(args)')
-    #main(args)
+    main(args)
