@@ -20,6 +20,7 @@ from ema import EMA
 
 torch.set_float32_matmul_precision('high')
 
+total = []
 forward = []
 backward = []
 op = []
@@ -40,6 +41,7 @@ class FiTModule(L.LightningModule):
         return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
+        total_start_time = time.time()
         opt = self.optimizers().optimizer
         opt.zero_grad()
 
@@ -72,6 +74,8 @@ class FiTModule(L.LightningModule):
         start_time = time.time()
         opt.step()
         op.append((time.time() - start_time))
+
+        total.append((time.time() - total_start_time))
 
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask = batch
@@ -165,12 +169,16 @@ def main(args):
         #accumulate_grad_batches=2,
         log_every_n_steps=args.log_every,
     )
-    
+
+    start_time = time.time()
     trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
 
-    print(f'forward: {np.mean(forward)}, {np.std(forward)}')
-    print(f'backward: {np.mean(backward)}, {np.std(backward)}')
-    print(f'Optimizer: {np.mean(op)}, {np.std(op)}')
+    print(f'total: {time.time() - start_time}')
+    print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
+    print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
+    print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
+    print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
