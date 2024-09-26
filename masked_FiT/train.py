@@ -178,16 +178,16 @@ def main(args):
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
     sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(total), label='training', log_scale=True).get_figure()
+    fig = sns.kdeplot(np.array(total), label='training', log_scale=True, density=True).get_figure()
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
-    fig = sns.kdeplot(np.array(forward), label='forward', log_scale=True).get_figure()
+    fig = sns.kdeplot(np.array(forward), label='forward', log_scale=True, density=True).get_figure()
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
-    fig = sns.kdeplot(np.array(backward), label='backward', log_scale=True).get_figure()
+    fig = sns.kdeplot(np.array(backward), label='backward', log_scale=True, density=True).get_figure()
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
-    fig = sns.kdeplot(np.array(op), label='optimizer', log_scale=True).get_figure()
+    fig = sns.kdeplot(np.array(op), label='optimizer', log_scale=True, density=True).get_figure()
 
     fig.legend()
     fig.savefig("optimizer.png")
