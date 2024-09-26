@@ -14,6 +14,7 @@ from diffusers import DDIMScheduler
 import torch.nn.functional as F
 from ema import EMA
 import matplotlib.pyplot as pl
+import seaborn as sns
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -176,20 +177,20 @@ def main(args):
 
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
-    fig = pl.hist(total, density=True, label='training')
+    sns.set_style('whitegrid')
+    fig = sns.kdeplot(np.array(total), label='training').get_figure()
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
-    fig = pl.hist(forward, density=True, label='forward')
+    fig = sns.kdeplot(np.array(forward), label='forward').get_figure()
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
-    fig = pl.hist(backward, density=True, label='backward')
+    fig = sns.kdeplot(np.array(backward), label='backward').get_figure()
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
-    fig = pl.hist(op, density=True, label='optimizer')
+    fig = sns.kdeplot(np.array(op), label='optimizer').get_figure()
 
-    pl.xlabel("Time")
-    pl.ylabel("Count")
-    pl.savefig("mfit.png")
+    fig.legend()
+    fig.savefig("optimizer.png")
 
 
 if __name__ == "__main__":
