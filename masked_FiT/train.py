@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from diffusers import DDIMScheduler
 import torch.nn.functional as F
 from ema import EMA
-import time
+from datetime import datetime
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -20,7 +20,7 @@ torch.set_float32_matmul_precision('high')
 
 forward = []
 backward = []
-loader = []
+op = []
 
 class FiTModule(L.LightningModule):
     def __init__(self, args):
@@ -29,7 +29,7 @@ class FiTModule(L.LightningModule):
         # self.model = torch.compile(FiT_models[args.model](), mode="max-autotune")
         self.model = FiT_models[args.model]()
 
-        self.automatic_optimization = True
+        self.automatic_optimization = False
         self.noise_scheduler = DDIMScheduler(num_train_timesteps=1000)
 
         self.save_hyperparameters()
@@ -38,6 +38,9 @@ class FiTModule(L.LightningModule):
         return self.model(x, t=t, y=y, pos=pos, mask=mask)
 
     def training_step(self, batch, batch_idx):
+        opt = self.optimizers().optimizer
+        opt.zero_grad()
+
         latent, label, pos, mask = batch
         model_kwargs = {'y': label, 'pos': pos, 'mask': mask}
 
@@ -47,7 +50,9 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
+        start_time = datetime.now()
         model_output = self.model(x_t, t=t, **model_kwargs)
+        forward.append((datetime.now() - start_time).microseconds)
 
         assert model_output.shape == noise.shape
 
@@ -57,7 +62,14 @@ class FiTModule(L.LightningModule):
         loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return loss
+
+        start_time = datetime.now()
+        self.manual_backward(loss)
+        backward.append((datetime.now() - start_time).microseconds)
+
+        start_time = datetime.now()
+        opt.step()
+        op.append((datetime.now() - start_time).microseconds)
 
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask = batch
@@ -79,7 +91,6 @@ class FiTModule(L.LightningModule):
         loss = F.mse_loss(masked_model_output, masked_target)
 
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4, weight_decay=0)
@@ -149,7 +160,7 @@ def main(args):
         max_epochs=args.epochs,
         callbacks=[checkpoint_callback, ema_callback],
         precision='bf16-mixed',
-        accumulate_grad_batches=2,
+        #accumulate_grad_batches=2,
         log_every_n_steps=args.log_every,
     )
     
