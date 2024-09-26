@@ -124,27 +124,6 @@ class FiTModule(L.LightningModule):
             collate_fn=dataset.collate
         )
         return loader
-    
-    def val_dataloader(self):
-        dataset = ImageNetLatentIterator({
-            "latent_folder": self.args.feature_val_path,
-            "sample_size": 256,
-            "patch_size": 2,
-            "vae_scale": 8,
-            "C": 4,
-            "embed_dim": 16,
-            "embed_method": "rotate"
-        })
-        loader = DataLoader(
-            dataset,
-            batch_size=self.args.global_batch_size,
-            shuffle=False,
-            num_workers=self.args.num_workers,
-            pin_memory=True,
-            drop_last=True,
-            collate_fn=dataset.collate
-        )
-        return loader
 
 #################################################################################
 #                                 Main Function                                 #
