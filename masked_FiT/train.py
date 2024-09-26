@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import torch
@@ -12,7 +13,6 @@ from torch.utils.data import DataLoader
 from diffusers import DDIMScheduler
 import torch.nn.functional as F
 from ema import EMA
-from datetime import datetime
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -52,9 +52,9 @@ class FiTModule(L.LightningModule):
 
         x_t = self.noise_scheduler.add_noise(latent, noise, t)
 
-        start_time = datetime.now()
+        start_time = time.time()
         model_output = self.model(x_t, t=t, **model_kwargs)
-        forward.append((datetime.now() - start_time).total_seconds())
+        forward.append((time.time() - start_time))
 
         assert model_output.shape == noise.shape
 
@@ -65,13 +65,13 @@ class FiTModule(L.LightningModule):
 
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
-        start_time = datetime.now()
+        start_time = time.time()
         self.manual_backward(loss)
-        backward.append((datetime.now() - start_time).total_seconds())
+        backward.append((time.time() - start_time))
 
-        start_time = datetime.now()
+        start_time = time.time()
         opt.step()
-        op.append((datetime.now() - start_time).total_seconds())
+        op.append((time.time() - start_time))
 
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask = batch
