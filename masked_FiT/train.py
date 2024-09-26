@@ -7,7 +7,7 @@ import argparse
 from lightning import Trainer, seed_everything
 from lightning.pytorch.callbacks import ModelCheckpoint
 from models.fit import FiT_models
-from preprocess.iterators import ImageNetLatentIterator
+from preprocess_old.iterators import ImageNetLatentIterator
 import lightning as L
 from torch.utils.data import DataLoader
 from diffusers import DDIMScheduler
@@ -120,8 +120,7 @@ class FiTModule(L.LightningModule):
             shuffle=True,
             num_workers=self.args.num_workers,
             pin_memory=True,
-            drop_last=True,
-            collate_fn=dataset.collate
+            drop_last=True
         )
         return loader
     
@@ -141,8 +140,7 @@ class FiTModule(L.LightningModule):
             shuffle=False,
             num_workers=self.args.num_workers,
             pin_memory=True,
-            drop_last=True,
-            collate_fn=dataset.collate
+            drop_last=True
         )
         return loader
 
@@ -190,7 +188,7 @@ def main(args):
     fig = sns.kdeplot(np.array(op), label='optimizer', log_scale=True).get_figure()
 
     fig.legend()
-    fig.savefig("optimizer.png")
+    fig.savefig("mfit.png")
 
 
 if __name__ == "__main__":
