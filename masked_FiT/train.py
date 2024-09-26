@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from diffusers import DDIMScheduler
 import torch.nn.functional as F
 from ema import EMA
+import seaborn as sns
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -175,9 +176,24 @@ def main(args):
 
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
+    sns.set_style('whitegrid')
+    fig = sns.kdeplot(np.array(total), bw=0.5).get_figure()
+    fig.savefig("~/GSU/masked_FiT/training.png")
+
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
+    sns.set_style('whitegrid')
+    fig = sns.kdeplot(np.array(forward), bw=0.5).get_figure()
+    fig.savefig("~/GSU/masked_FiT/forward.png")
+
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
+    sns.set_style('whitegrid')
+    fig = sns.kdeplot(np.array(backward), bw=0.5).get_figure()
+    fig.savefig("~/GSU/masked_FiT/backward.png")
+
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
+    sns.set_style('whitegrid')
+    fig = sns.kdeplot(np.array(op), bw=0.5).get_figure()
+    fig.savefig("~/GSU/masked_FiT/optimizer.png")
 
 
 if __name__ == "__main__":
