@@ -178,22 +178,22 @@ def main(args):
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
     sns.set_style('whitegrid')
     fig = sns.kdeplot(np.array(total), bw=0.5).get_figure()
-    fig.savefig("~/GSU/masked_FiT/training.png")
+    fig.savefig("training.png")
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
     sns.set_style('whitegrid')
     fig = sns.kdeplot(np.array(forward), bw=0.5).get_figure()
-    fig.savefig("~/GSU/masked_FiT/forward.png")
+    fig.savefig("forward.png")
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
     sns.set_style('whitegrid')
     fig = sns.kdeplot(np.array(backward), bw=0.5).get_figure()
-    fig.savefig("~/GSU/masked_FiT/backward.png")
+    fig.savefig("backward.png")
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
     sns.set_style('whitegrid')
     fig = sns.kdeplot(np.array(op), bw=0.5).get_figure()
-    fig.savefig("~/GSU/masked_FiT/optimizer.png")
+    fig.savefig("optimizer.png")
 
 
 if __name__ == "__main__":
