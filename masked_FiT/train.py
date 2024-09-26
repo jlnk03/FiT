@@ -54,7 +54,7 @@ class FiTModule(L.LightningModule):
 
         start_time = datetime.now()
         model_output = self.model(x_t, t=t, **model_kwargs)
-        forward.append((datetime.now() - start_time).microseconds)
+        forward.append((datetime.now() - start_time).total_seconds())
 
         assert model_output.shape == noise.shape
 
@@ -67,11 +67,11 @@ class FiTModule(L.LightningModule):
 
         start_time = datetime.now()
         self.manual_backward(loss)
-        backward.append((datetime.now() - start_time).microseconds)
+        backward.append((datetime.now() - start_time).total_seconds())
 
         start_time = datetime.now()
         opt.step()
-        op.append((datetime.now() - start_time).microseconds)
+        op.append((datetime.now() - start_time).total_seconds())
 
     def validation_step(self, batch, batch_idx):
         latent, label, pos, mask = batch
