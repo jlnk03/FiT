@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import torch
 import argparse
 from lightning import Trainer, seed_everything
@@ -165,6 +167,10 @@ def main(args):
     )
     
     trainer.fit(model, ckpt_path=args.resume_from_checkpoint)
+
+    print(f'forward: {np.mean(forward)}, {np.std(forward)}')
+    print(f'backward: {np.mean(backward)}, {np.std(backward)}')
+    print(f'Optimizer: {np.mean(op)}, {np.std(op)}')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
