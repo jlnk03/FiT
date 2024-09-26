@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from diffusers import DDIMScheduler
 import torch.nn.functional as F
 from ema import EMA
-import seaborn as sns
+import matplotlib.pyplot as pl
 
 #################################################################################
 #                                  PyTorch Lightning Module                     #
@@ -176,25 +176,28 @@ def main(args):
 
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
-    sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(total)).get_figure()
-    fig.savefig("training.png")
+    fig = pl.hist(total, density=True)
+    pl.xlabel("Time")
+    pl.ylabel("Count")
+    pl.savefig("abc.png")
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
-    sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(forward)).get_figure()
-    fig.savefig("forward.png")
+    fig = pl.hist(forward, density=True)
+    pl.xlabel("Time")
+    pl.ylabel("Count")
+    pl.savefig("abc.png")
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
-    sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(backward)).get_figure()
-    fig.savefig("backward.png")
+    fig = pl.hist(backward, density=True)
+    pl.xlabel("Time")
+    pl.ylabel("Count")
+    pl.savefig("abc.png")
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
-    print(op)
-    sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(op)).get_figure()
-    fig.savefig("optimizer.png")
+    fig = pl.hist(op, density=True)
+    pl.xlabel("Time")
+    pl.ylabel("Count")
+    pl.savefig("optimizer.png")
 
 
 if __name__ == "__main__":
