@@ -177,22 +177,23 @@ def main(args):
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
     sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(total), bw=0.5).get_figure()
+    fig = sns.kdeplot(np.array(total)).get_figure()
     fig.savefig("training.png")
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
     sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(forward), bw=0.5).get_figure()
+    fig = sns.kdeplot(np.array(forward)).get_figure()
     fig.savefig("forward.png")
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
     sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(backward), bw=0.5).get_figure()
+    fig = sns.kdeplot(np.array(backward)).get_figure()
     fig.savefig("backward.png")
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
+    print(op)
     sns.set_style('whitegrid')
-    fig = sns.kdeplot(np.array(op), bw=0.5).get_figure()
+    fig = sns.kdeplot(np.array(op)).get_figure()
     fig.savefig("optimizer.png")
 
 
