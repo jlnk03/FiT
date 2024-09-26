@@ -176,28 +176,20 @@ def main(args):
 
     print(f'total: {time.time() - start_time}')
     print(f'training: {np.sum(total)}, {np.mean(total)}, {np.std(total)}')
-    fig = pl.hist(total, density=True)
-    pl.xlabel("Time")
-    pl.ylabel("Count")
-    pl.savefig("abc.png")
+    fig = pl.hist(total, density=True, label='training')
 
     print(f'forward: {np.sum(forward)}, {np.mean(forward)}, {np.std(forward)}')
-    fig = pl.hist(forward, density=True)
-    pl.xlabel("Time")
-    pl.ylabel("Count")
-    pl.savefig("abc.png")
+    fig = pl.hist(forward, density=True, label='forward')
 
     print(f'backward: {np.sum(backward)}, {np.mean(backward)}, {np.std(backward)}')
-    fig = pl.hist(backward, density=True)
-    pl.xlabel("Time")
-    pl.ylabel("Count")
-    pl.savefig("abc.png")
+    fig = pl.hist(backward, density=True, label='backward')
 
     print(f'Optimizer: {np.sum(op)}, {np.mean(op)}, {np.std(op)}')
-    fig = pl.hist(op, density=True)
+    fig = pl.hist(op, density=True, label='optimizer')
+
     pl.xlabel("Time")
     pl.ylabel("Count")
-    pl.savefig("optimizer.png")
+    pl.savefig("mfit.png")
 
 
 if __name__ == "__main__":
